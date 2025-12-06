@@ -18,7 +18,7 @@ public interface DocumentMapper {
     /**
      * 根据docId查询文档
      */
-    @Select("select * from document where doc_id = #{docId}")
+    @Select("select * from document where doc_id = #{docId} and status = 1")
     Document getByDocId(String docId);
 
     /**
@@ -30,6 +30,6 @@ public interface DocumentMapper {
     /**
      * 查询用户文档列表
      */
-    @Select("select * from document where owner_id = #{ownerId} order by update_time desc")
+    @Select("select * from document where owner_id = #{ownerId} and status = 1 order by update_time desc")
     java.util.List<Document> listByOwnerId(Long ownerId);
 }

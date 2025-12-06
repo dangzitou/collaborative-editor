@@ -48,4 +48,14 @@ public class DocumentController {
         log.info("获取文档列表, userId: {}", userId);
         return Result.success(documentService.listDocuments(userId));
     }
+
+    /**
+     * 删除文档
+     */
+    @DeleteMapping("/{docId}")
+    public Result<Void> deleteDocument(@PathVariable String docId) {
+        log.info("删除文档: {}", docId);
+        documentService.deleteDocument(docId);
+        return Result.success();
+    }
 }

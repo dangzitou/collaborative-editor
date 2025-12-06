@@ -95,6 +95,8 @@ const showCreateModal = ref(false)
 const newDocTitle = ref('')
 const showListModal = ref(false)
 const docList = ref([])
+const showDeleteModal = ref(false)
+const docToDelete = ref(null)
 
 async function openCreateModal() {
   if (!isLoggedIn.value) {
@@ -163,6 +165,42 @@ async function fetchDocList() {
   } catch (e) {
     console.error(e)
     alert('获取列表失败')
+  }
+}
+
+function deleteDoc(doc) {
+  docToDelete.value = doc
+  showDeleteModal.value = true
+}
+
+async function confirmDelete() {
+  if (!docToDelete.value) return
+  
+  const doc = docToDelete.value
+  try {
+    const res = await fetch(`http://localhost:8080/api/doc/${doc.docId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + token.value }
+    })
+    const data = await res.json()
+    if (data.code === 200) {
+      // Remove from list
+      docList.value = docList.value.filter(d => d.docId !== doc.docId)
+      // If current doc is deleted, clear it
+      if (docId.value === doc.docId) {
+          docId.value = ''
+          docTitle.value = '未命名文档'
+          content.value = ''
+          disconnect()
+      }
+      showDeleteModal.value = false
+      docToDelete.value = null
+    } else {
+      alert(data.message || '删除失败')
+    }
+  } catch (e) {
+    console.error(e)
+    alert('删除失败')
   }
 }
 
@@ -418,10 +456,27 @@ onMounted(async () => {
               <div class="doc-item-title">{{ doc.title }}</div>
               <div class="doc-item-time">更新时间: {{ new Date(doc.updateTime).toLocaleString() }}</div>
             </div>
+            <button class="delete-btn" @click.stop="deleteDoc(doc)" title="删除">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="#5f6368">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
+            </button>
           </div>
         </div>
         <div class="modal-actions">
           <button class="btn-secondary" @click="showListModal = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 删除确认弹窗 -->
+    <div v-if="showDeleteModal" class="modal-overlay" @click="showDeleteModal = false">
+      <div class="modal-content" @click.stop style="max-width: 400px;">
+        <h3>删除文档</h3>
+        <p style="margin: 20px 0; color: #5f6368;">确定要删除文档 "{{ docToDelete?.title }}" 吗？此操作无法撤销。</p>
+        <div class="modal-actions">
+          <button class="btn-secondary" @click="showDeleteModal = false">取消</button>
+          <button class="btn-danger" @click="confirmDelete">删除</button>
         </div>
       </div>
     </div>
@@ -816,6 +871,31 @@ onMounted(async () => {
 .doc-item-time {
   font-size: 12px;
   color: #5f6368;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  padding: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.doc-item:hover .delete-btn {
+  opacity: 1;
+}
+
+.delete-btn:hover {
+  background: #fce8e6;
+}
+
+.delete-btn:hover svg {
+  fill: #ea4335;
 }
 
 .toolbar-group {

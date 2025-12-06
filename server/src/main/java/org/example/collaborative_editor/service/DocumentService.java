@@ -23,4 +23,9 @@ public interface DocumentService {
      * 获取用户文档列表
      */
     java.util.List<Document> listDocuments(Long userId);
+
+    /**
+     * 删除文档
+     */
+    void deleteDocument(String docId);
 }

@@ -2,12 +2,15 @@ package org.example.collaborative_editor.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.collaborative_editor.common.Result;
+import org.example.collaborative_editor.context.BaseContext;
 import org.example.collaborative_editor.constant.MessageConstant;
 import org.example.collaborative_editor.constant.StatusConstant;
 import org.example.collaborative_editor.entity.Document;
 import org.example.collaborative_editor.exception.BusinessException;
 import org.example.collaborative_editor.mapper.DocumentMapper;
 import org.example.collaborative_editor.service.DocumentService;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +22,7 @@ import java.util.UUID;
 public class DocumentServiceImpl implements DocumentService {
 
     private final DocumentMapper documentMapper;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
     @Transactional
@@ -55,5 +59,25 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     public java.util.List<Document> listDocuments(Long userId) {
         return documentMapper.listByOwnerId(userId);
+    }
+
+    @Override
+    public void deleteDocument(String docId) {
+        Document document = documentMapper.getByDocId(docId);
+        if (document == null) {
+            throw new BusinessException(MessageConstant.DOCUMENT_NOT_FOUND);
+        }
+
+        Long currentUserId = BaseContext.getCurrentId();
+        if (!document.getOwnerId().equals(currentUserId)) {
+            throw new BusinessException(MessageConstant.DOCUMENT_NO_PERMISSION);
+        }
+
+        document.setStatus(StatusConstant.DISABLE);
+        documentMapper.update(document);
+
+        // 删除Redis缓存
+        redisTemplate.delete("doc:" + docId);
+        redisTemplate.opsForSet().remove("dirty_docs", docId);
     }
 }
