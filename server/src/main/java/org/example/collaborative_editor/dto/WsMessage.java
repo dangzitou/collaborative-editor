@@ -1,13 +1,13 @@
-package org.example.collaborative_editor.ws;
+package org.example.collaborative_editor.dto;
 
 import lombok.Data;
 
 /**
- * WebSocket 消息模型类
+ * WebSocket 消息 DTO
  * 用于定义客户端和服务器之间通信的 JSON 数据结构。
  */
 @Data
-public class Message {
+public class WsMessage {
 
     /**
      * 消息类型

@@ -5,6 +5,7 @@ import jakarta.websocket.*;
 import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
 import lombok.extern.slf4j.Slf4j;
+import org.example.collaborative_editor.dto.WsMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -74,7 +75,7 @@ public class EditorServer {
         String content = docContent.get(docId);
         if (content != null) {
             try {
-                Message syncMsg = new Message();
+                WsMessage syncMsg = new WsMessage();
                 syncMsg.setType("SYNC");
                 syncMsg.setSender("server");
                 syncMsg.setData(content);
@@ -97,7 +98,7 @@ public class EditorServer {
     public void onMessage(String messageStr, Session session) {
         try {
             // 解析收到的 JSON 消息
-            Message msg = objectMapper.readValue(messageStr, Message.class);
+            WsMessage msg = objectMapper.readValue(messageStr, WsMessage.class);
 
             // 如果是 EDIT 类型，更新 docContent，并广播
             if ("EDIT".equals(msg.getType())) {
