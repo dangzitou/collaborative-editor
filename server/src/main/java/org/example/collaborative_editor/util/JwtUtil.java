@@ -3,6 +3,7 @@ package org.example.collaborative_editor.util;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import org.example.collaborative_editor.constant.JwtClaimsConstant;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -39,7 +40,7 @@ public class JwtUtil {
         
         return Jwts.builder()
                 .subject(username)
-                .claim("userId", userId)
+                .claim(JwtClaimsConstant.USER_ID, userId)
                 .issuedAt(now)
                 .expiration(expiryDate)
                 .signWith(getSigningKey())
@@ -68,7 +69,7 @@ public class JwtUtil {
      * 获取用户ID
      */
     public Long getUserId(String token) {
-        return parseToken(token).get("userId", Long.class);
+        return parseToken(token).get(JwtClaimsConstant.USER_ID, Long.class);
     }
     
     /**

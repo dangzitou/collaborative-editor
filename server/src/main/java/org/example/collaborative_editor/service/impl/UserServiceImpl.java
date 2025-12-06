@@ -2,10 +2,13 @@ package org.example.collaborative_editor.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.collaborative_editor.constant.MessageConstant;
+import org.example.collaborative_editor.constant.StatusConstant;
 import org.example.collaborative_editor.dto.LoginRequest;
 import org.example.collaborative_editor.dto.LoginResponse;
 import org.example.collaborative_editor.dto.RegisterRequest;
 import org.example.collaborative_editor.entity.User;
+import org.example.collaborative_editor.exception.BusinessException;
 import org.example.collaborative_editor.mapper.UserMapper;
 import org.example.collaborative_editor.service.UserService;
 import org.example.collaborative_editor.util.JwtUtil;
@@ -31,13 +34,13 @@ public class UserServiceImpl implements UserService {
         // 检查用户名是否存在
         if (userMapper.existsByUsername(request.getUsername()) > 0) {
             log.debug("用户名已存在: {}", request.getUsername());
-            throw new RuntimeException("用户名已存在");
+            throw new BusinessException(MessageConstant.USERNAME_EXIST);
         }
 
         // 检查邮箱是否存在
         if (request.getEmail() != null && userMapper.existsByEmail(request.getEmail()) > 0) {
             log.debug("邮箱已被注册: {}", request.getEmail());
-            throw new RuntimeException("邮箱已被注册");
+            throw new BusinessException(MessageConstant.EMAIL_EXIST);
         }
 
         // 创建用户
@@ -46,7 +49,7 @@ public class UserServiceImpl implements UserService {
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setNickname(request.getNickname() != null ? request.getNickname() : request.getUsername());
         user.setEmail(request.getEmail());
-        user.setStatus(1);
+        user.setStatus(StatusConstant.ENABLE);
 
         userMapper.insert(user);
         log.debug("用户注册完成: username={}, userId={}", user.getUsername(), user.getId());
@@ -60,13 +63,19 @@ public class UserServiceImpl implements UserService {
         User user = userMapper.findByUsername(request.getUsername());
         if (user == null) {
             log.debug("用户不存在: {}", request.getUsername());
-            throw new RuntimeException("用户名或密码错误");
+            throw new BusinessException(MessageConstant.PASSWORD_ERROR);
+        }
+
+        // 检查账号状态
+        if (StatusConstant.DISABLE.equals(user.getStatus())) {
+            log.debug("账号已禁用: {}", request.getUsername());
+            throw new BusinessException(MessageConstant.ACCOUNT_DISABLED);
         }
 
         // 验证密码
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
             log.debug("密码验证失败: username={}", request.getUsername());
-            throw new RuntimeException("用户名或密码错误");
+            throw new BusinessException(MessageConstant.PASSWORD_ERROR);
         }
 
         // 生成 JWT

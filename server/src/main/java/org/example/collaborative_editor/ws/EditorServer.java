@@ -5,6 +5,7 @@ import jakarta.websocket.*;
 import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
 import lombok.extern.slf4j.Slf4j;
+import org.example.collaborative_editor.constant.WsMessageType;
 import org.example.collaborative_editor.dto.WsMessage;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -76,10 +77,10 @@ public class EditorServer {
         if (content != null) {
             try {
                 WsMessage syncMsg = new WsMessage();
-                syncMsg.setType("SYNC");
-                syncMsg.setSender("server");
+                syncMsg.setType(WsMessageType.SYNC);
+                syncMsg.setSender(WsMessageType.SENDER_SERVER);
                 syncMsg.setData(content);
-                
+
                 String json = objectMapper.writeValueAsString(syncMsg);
                 session.getAsyncRemote().sendText(json);
             } catch (IOException e) {
@@ -101,10 +102,10 @@ public class EditorServer {
             WsMessage msg = objectMapper.readValue(messageStr, WsMessage.class);
 
             // 如果是 EDIT 类型，更新 docContent，并广播
-            if ("EDIT".equals(msg.getType())) {
+            if (WsMessageType.EDIT.equals(msg.getType())) {
                 // 更新服务器端暂存的文档内容
                 docContent.put(docId, msg.getData());
-                
+
                 // 广播给同文档下的其他人（排除发送者自己）
                 broadcast(messageStr, session);
             }
