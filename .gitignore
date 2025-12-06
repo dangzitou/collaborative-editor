@@ -38,9 +38,6 @@ build/
 ### Mac OS ###
 .DS_Store
 
-### Nginx ###
-nginx/nginx.exe
-nginx/conf/mime.types
+### Nginx 运行时文件 ###
 nginx/logs/
 nginx/temp/
-nginx/html/
