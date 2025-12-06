@@ -516,6 +516,92 @@ Authorization: Bearer <token>
 
 ## 协作开发流程
 
+### 团队分工
+
+| 角色 | 负责内容 | 核心文件 |
+|------|----------|----------|
+| 后端核心 | OT/CRDT 算法、WebSocket 实时同步 | `EditorServer.java`、算法相关类 |
+| 后端 CRUD | 用户/文档/协作者 API | `controller/`、`service/`、`mapper/` |
+| 前端 | Vue 组件、UI 交互、API 对接 | `web/src/` |
+
+### API 接口文档
+
+接口文档位于 `docs/api.json`，使用 OpenAPI 3.0 格式。
+
+导入到 Apifox：
+1. 下载 Apifox: https://apifox.com
+2. 创建项目 -> 导入数据 -> 选择 OpenAPI/Swagger
+3. 上传 `docs/api.json` 文件
+4. 导入后可查看所有接口，并使用 Mock 功能
+
+接口开发状态：
+
+| 模块 | 接口 | 状态 |
+|------|------|------|
+| 认证 | POST /api/auth/register | 已完成 |
+| 认证 | POST /api/auth/login | 已完成 |
+| 用户 | GET /api/user/info | 待开发 |
+| 用户 | PUT /api/user/info | 待开发 |
+| 文档 | GET /api/documents | 待开发 |
+| 文档 | POST /api/documents | 待开发 |
+| 文档 | GET /api/documents/{id} | 待开发 |
+| 文档 | PUT /api/documents/{id} | 待开发 |
+| 文档 | DELETE /api/documents/{id} | 待开发 |
+| 协作 | GET /api/documents/{id}/collaborators | 待开发 |
+| 协作 | POST /api/documents/{id}/collaborators | 待开发 |
+| 协作 | DELETE /api/documents/{id}/collaborators/{userId} | 待开发 |
+
+### 前后端并行开发
+
+前端开发无需等待后端接口完成，使用 Apifox Mock 服务：
+
+1. 在 Apifox 中打开接口
+2. 点击「Mock」标签，复制 Mock URL
+3. 前端调用 Mock URL 进行开发
+4. 后端接口完成后，切换到真实 URL
+
+前端 Mock 数据示例：
+
+```javascript
+// 开发时使用 Mock
+const mockDocuments = [
+  { id: 'doc-001', title: '项目需求', updatedAt: '2025-12-06' },
+  { id: 'doc-002', title: '技术方案', updatedAt: '2025-12-05' }
+]
+
+// 接口完成后切换
+// const { data } = await api.get('/api/documents')
+```
+
+### 后端 CRUD 开发指南
+
+开发新接口的步骤：
+
+1. 在 `dto/` 创建请求/响应 DTO
+2. 在 `mapper/` 添加 Mapper 接口和 XML
+3. 在 `service/` 添加 Service 接口和实现
+4. 在 `controller/` 添加 Controller
+5. 使用 `@Slf4j` 添加日志
+6. 更新 `docs/api.json` 接口状态
+
+代码规范：
+- Controller 使用 `@Slf4j` 记录请求日志
+- Service 使用 `@Slf4j` 记录业务逻辑日志
+- 统一返回 `Result<T>` 格式
+- 需要认证的接口从 SecurityContext 获取用户信息
+
+示例：获取当前用户
+
+```java
+@GetMapping("/info")
+public Result<User> getUserInfo() {
+    UserPrincipal principal = (UserPrincipal) SecurityContextHolder
+        .getContext().getAuthentication().getPrincipal();
+    Long userId = principal.getUserId();
+    // ... 查询用户信息
+}
+```
+
 ### Git 工作流
 
 ```bash
@@ -535,6 +621,11 @@ git push origin feature/your-feature
 # 5. 创建 Pull Request
 ```
 
+分支命名规范：
+- `feature/xxx` - 新功能
+- `fix/xxx` - Bug 修复
+- `docs/xxx` - 文档更新
+
 ### 开发环境搭建步骤
 
 1. 克隆项目
@@ -542,15 +633,15 @@ git push origin feature/your-feature
    git clone https://github.com/dangzitou/collaborative-editor.git
    ```
 
-2. 安装后端依赖（IDEA 自动完成）
+2. 配置数据库（参考 [数据库配置](#数据库配置)）
 
-3. 安装前端依赖
+3. 安装后端依赖（IDEA 自动完成）
+
+4. 安装前端依赖
    ```bash
    cd web
    npm install
    ```
-
-4. 下载 Nginx（可选，用于生产模式测试）
 
 ### 日常开发命令
 
@@ -568,6 +659,7 @@ git push origin feature/your-feature
 2. 前端开发模式下修改代码会自动刷新
 3. 使用 Nginx 部署时，前端代码修改后需要运行 `npm run build`
 4. 多人协作时注意拉取最新代码
+5. 开发新接口前先在 `docs/api.json` 中定义接口规范
 
 ---
 
