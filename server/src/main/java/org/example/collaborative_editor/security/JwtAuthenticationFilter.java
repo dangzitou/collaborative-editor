@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.example.collaborative_editor.context.BaseContext;
 import org.example.collaborative_editor.util.JwtUtil;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -29,8 +30,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException {
+            HttpServletResponse response,
+            FilterChain filterChain) throws ServletException, IOException {
 
         String token = getTokenFromRequest(request);
 
@@ -43,19 +44,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 // 创建认证对象
                 UserPrincipal principal = new UserPrincipal(userId, username);
-                UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(principal, null, Collections.emptyList());
+                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(principal,
+                        null, Collections.emptyList());
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                // 设置当前用户ID到 BaseContext，方便后续业务获取
+                BaseContext.setCurrentId(userId);
             } else {
                 log.debug("JWT 验证失败: uri={}", request.getRequestURI());
             }
         }
 
-        filterChain.doFilter(request, response);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            // 请求结束后清理 ThreadLocal，防止内存泄漏
+            BaseContext.removeCurrentId();
+        }
     }
-    
+
     /**
      * 从请求头中获取 Token
      */
@@ -67,4 +76,3 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return null;
     }
 }
-

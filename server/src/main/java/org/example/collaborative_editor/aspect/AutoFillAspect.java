@@ -54,32 +54,47 @@ public class AutoFillAspect {
         LocalDateTime now = LocalDateTime.now();
         Long currentId = BaseContext.getCurrentId();
 
+        // 如果当前没有登录用户（如定时任务），则不更新操作人，或者设置为系统用户ID（如0）
+        // 这里选择如果为null则不更新操作人字段，由MyBatis的<if>标签控制
+
         // 4. 根据当前不同的操作类型，为对应的属性通过反射来赋值
         if (operationType == OperationType.INSERT) {
             // 为4个公共字段赋值
             try {
-                Method setCreateTime = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_CREATE_TIME, LocalDateTime.class);
-                Method setCreateUser = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_CREATE_USER, Long.class);
-                Method setUpdateTime = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_TIME, LocalDateTime.class);
-                Method setUpdateUser = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_USER, Long.class);
+                Method setCreateTime = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_CREATE_TIME,
+                        LocalDateTime.class);
+                Method setCreateUser = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_CREATE_USER,
+                        Long.class);
+                Method setUpdateTime = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_TIME,
+                        LocalDateTime.class);
+                Method setUpdateUser = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_USER,
+                        Long.class);
 
                 // 通过反射为对象属性赋值
                 setCreateTime.invoke(entity, now);
-                setCreateUser.invoke(entity, currentId);
                 setUpdateTime.invoke(entity, now);
-                setUpdateUser.invoke(entity, currentId);
+
+                if (currentId != null) {
+                    setCreateUser.invoke(entity, currentId);
+                    setUpdateUser.invoke(entity, currentId);
+                }
             } catch (Exception e) {
                 log.error("公共字段自动填充失败", e);
             }
         } else if (operationType == OperationType.UPDATE) {
             // 为2个公共字段赋值
             try {
-                Method setUpdateTime = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_TIME, LocalDateTime.class);
-                Method setUpdateUser = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_USER, Long.class);
+                Method setUpdateTime = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_TIME,
+                        LocalDateTime.class);
+                Method setUpdateUser = entity.getClass().getDeclaredMethod(AutoFillConstant.SET_UPDATE_USER,
+                        Long.class);
 
                 // 通过反射为对象属性赋值
                 setUpdateTime.invoke(entity, now);
-                setUpdateUser.invoke(entity, currentId);
+
+                if (currentId != null) {
+                    setUpdateUser.invoke(entity, currentId);
+                }
             } catch (Exception e) {
                 log.error("公共字段自动填充失败", e);
             }

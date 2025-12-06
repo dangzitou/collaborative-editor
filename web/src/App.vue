@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useWebSocket } from './composables/useWebSocket'
 import { useAuth } from './composables/useAuth'
 import AuthModal from './components/AuthModal.vue'
@@ -12,7 +12,7 @@ const {
   sendJson
 } = useWebSocket()
 
-const { user, isLoggedIn, logout } = useAuth()
+const { user, token, isLoggedIn, logout } = useAuth()
 
 // 登录弹窗
 const showAuthModal = ref(false)
@@ -89,6 +89,123 @@ watch(() => messages.value, (newMessages) => {
 function getInitial(name) {
   return name.charAt(0).toUpperCase()
 }
+
+// 列表和创建弹窗
+const showCreateModal = ref(false)
+const newDocTitle = ref('')
+const showListModal = ref(false)
+const docList = ref([])
+
+async function openCreateModal() {
+  if (!isLoggedIn.value) {
+    alert('请先登录')
+    showAuthModal.value = true
+    return
+  }
+  newDocTitle.value = '未命名文档'
+  showCreateModal.value = true
+}
+
+async function handleCreateDoc() {
+  if (!newDocTitle.value) return
+
+  try {
+    const res = await fetch('http://localhost:8080/api/doc', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token.value
+      },
+      body: JSON.stringify({ title: newDocTitle.value })
+    })
+    const data = await res.json()
+    if (data.code === 200) {
+      docId.value = data.data.docId
+      docTitle.value = data.data.title
+      content.value = ''
+      
+      // Update URL
+      const url = new URL(window.location)
+      url.searchParams.set('docId', docId.value)
+      window.history.pushState({}, '', url)
+      
+      // Reconnect
+      if (isConnected.value) disconnect()
+      handleConnect()
+      
+      showCreateModal.value = false
+    } else {
+      alert(data.message || '创建失败')
+    }
+  } catch (e) {
+    console.error(e)
+    alert('创建失败')
+  }
+}
+
+async function fetchDocList() {
+  if (!isLoggedIn.value) {
+    alert('请先登录')
+    showAuthModal.value = true
+    return
+  }
+  try {
+    const res = await fetch('http://localhost:8080/api/doc/list', {
+      headers: { 'Authorization': 'Bearer ' + token.value }
+    })
+    const data = await res.json()
+    if (data.code === 200) {
+      docList.value = data.data
+      showListModal.value = true
+    } else {
+      alert(data.message)
+    }
+  } catch (e) {
+    console.error(e)
+    alert('获取列表失败')
+  }
+}
+
+function openDoc(doc) {
+  docId.value = doc.docId
+  docTitle.value = doc.title
+  // 切换文档时先清空内容，等待WebSocket或API加载
+  content.value = '' 
+  
+  const url = new URL(window.location)
+  url.searchParams.set('docId', docId.value)
+  window.history.pushState({}, '', url)
+  
+  if (isConnected.value) disconnect()
+  handleConnect()
+  
+  showListModal.value = false
+}
+
+onMounted(async () => {
+  const params = new URLSearchParams(window.location.search)
+  const id = params.get('docId')
+  if (id) {
+    docId.value = id
+    // Fetch doc info
+    try {
+        const res = await fetch(`http://localhost:8080/api/doc/${id}`, {
+             headers: { 'Authorization': 'Bearer ' + token.value }
+        })
+        const data = await res.json()
+        if (data.code === 200) {
+            docTitle.value = data.data.title
+            content.value = data.data.content || ''
+        }
+    } catch(e) {
+        console.error(e)
+    }
+  }
+  // Connect if we have a docId
+  if (docId.value) {
+      handleConnect()
+  }
+})
 </script>
 
 <template>
@@ -100,6 +217,10 @@ function getInitial(name) {
           <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z"/>
           </svg>
+        </div>
+        <div v-if="isLoggedIn" style="display: flex; gap: 8px; margin-right: 15px;">
+          <button class="btn-primary" @click="openCreateModal" style="padding: 6px 12px; font-size: 14px;">新建</button>
+          <button class="btn-secondary" @click="fetchDocList" style="padding: 6px 12px; font-size: 14px;">我的文档</button>
         </div>
         <div class="doc-info">
           <div class="doc-title" v-if="!isEditingTitle" @click="isEditingTitle = true">
@@ -265,6 +386,45 @@ function getInitial(name) {
         </div>
       </div>
     </main>
+
+    <!-- 创建文档弹窗 -->
+    <div v-if="showCreateModal" class="modal-overlay" @click="showCreateModal = false">
+      <div class="modal-content" @click.stop>
+        <h3>新建文档</h3>
+        <div class="form-item">
+          <label>文档标题</label>
+          <input v-model="newDocTitle" placeholder="请输入文档标题" @keyup.enter="handleCreateDoc" autofocus>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" @click="showCreateModal = false">取消</button>
+          <button class="btn-primary" @click="handleCreateDoc">创建</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文档列表弹窗 -->
+    <div v-if="showListModal" class="modal-overlay" @click="showListModal = false">
+      <div class="modal-content list-modal" @click.stop>
+        <h3>我的文档</h3>
+        <div class="doc-list">
+          <div v-if="docList.length === 0" class="empty-tip">暂无文档</div>
+          <div v-else v-for="doc in docList" :key="doc.docId" class="doc-item" @click="openDoc(doc)">
+            <div class="doc-item-icon">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="#1a73e8">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+              </svg>
+            </div>
+            <div class="doc-item-info">
+              <div class="doc-item-title">{{ doc.title }}</div>
+              <div class="doc-item-time">更新时间: {{ new Date(doc.updateTime).toLocaleString() }}</div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" @click="showListModal = false">关闭</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -534,6 +694,127 @@ function getInitial(name) {
   align-items: center;
   padding: 0 16px;
   gap: 4px;
+}
+
+.doc-title-input {
+  min-width: 200px;
+}
+
+.btn-secondary {
+  padding: 8px 24px;
+  background: #fff;
+  color: #5f6368;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #f1f3f4;
+  color: #202124;
+}
+
+/* 弹窗样式 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  width: 400px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h3 {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  color: #202124;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.modal-actions button {
+  width: auto;
+  padding: 8px 24px;
+}
+
+/* 列表弹窗 */
+.list-modal {
+  width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.doc-list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-bottom: 16px;
+}
+
+.empty-tip {
+  padding: 32px;
+  text-align: center;
+  color: #5f6368;
+}
+
+.doc-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f3f4;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.doc-item:last-child {
+  border-bottom: none;
+}
+
+.doc-item:hover {
+  background: #f8f9fa;
+}
+
+.doc-item-icon {
+  margin-right: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.doc-item-info {
+  flex: 1;
+}
+
+.doc-item-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #202124;
+  margin-bottom: 4px;
+}
+
+.doc-item-time {
+  font-size: 12px;
+  color: #5f6368;
 }
 
 .toolbar-group {

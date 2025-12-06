@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.example.collaborative_editor.constant.WsMessageType;
 import org.example.collaborative_editor.dto.WsMessage;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -33,21 +34,25 @@ public class EditorServer {
     private static final Map<String, CopyOnWriteArraySet<Session>> docSessions = new ConcurrentHashMap<>();
 
     /**
-     * 暂存每个文档的当前内容。
-     * Key: docId
-     * Value: 文档内容
-     */
-    private static final Map<String, String> docContent = new ConcurrentHashMap<>();
-
-    /**
      * Jackson ObjectMapper，用于 JSON 解析和生成。
      * 由于 WebSocket 是多例模式，需要通过静态 setter 方法注入。
      */
     private static ObjectMapper objectMapper;
 
+    /**
+     * RedisTemplate，用于操作 Redis。
+     * 由于 WebSocket 是多例模式，需要通过静态 setter 方法注入。
+     */
+    private static RedisTemplate<String, Object> redisTemplate;
+
     @Autowired
     public void setObjectMapper(ObjectMapper objectMapper) {
         EditorServer.objectMapper = objectMapper;
+    }
+
+    @Autowired
+    public void setRedisTemplate(RedisTemplate<String, Object> redisTemplate) {
+        EditorServer.redisTemplate = redisTemplate;
     }
 
     /**
@@ -65,15 +70,17 @@ public class EditorServer {
     @OnOpen
     public void onOpen(Session session, @PathParam("docId") String docId) {
         this.docId = docId;
-        
+
         // 将用户加入对应文档的集合
         // computeIfAbsent 保证原子性：如果集合不存在则创建，存在则返回
         docSessions.computeIfAbsent(docId, k -> new CopyOnWriteArraySet<>()).add(session);
-        
+
         log.info("用户 {} 加入文档 {}, 当前在线人数: {}", session.getId(), docId, docSessions.get(docId).size());
 
+        // 从 Redis 获取文档内容
+        String content = (String) redisTemplate.opsForValue().get("doc:" + docId);
+
         // 如果该文档已有内容，立即发送一条 type: "SYNC" 的消息给新用户
-        String content = docContent.get(docId);
         if (content != null) {
             try {
                 WsMessage syncMsg = new WsMessage();
@@ -101,10 +108,13 @@ public class EditorServer {
             // 解析收到的 JSON 消息
             WsMessage msg = objectMapper.readValue(messageStr, WsMessage.class);
 
-            // 如果是 EDIT 类型，更新 docContent，并广播
+            // 如果是 EDIT 类型，更新 Redis，并广播
             if (WsMessageType.EDIT.equals(msg.getType())) {
-                // 更新服务器端暂存的文档内容
-                docContent.put(docId, msg.getData());
+                // 更新 Redis 中的文档内容
+                redisTemplate.opsForValue().set("doc:" + docId, msg.getData());
+
+                // 标记文档为脏数据（需要同步到 MySQL）
+                redisTemplate.opsForSet().add("dirty_docs", docId);
 
                 // 广播给同文档下的其他人（排除发送者自己）
                 broadcast(messageStr, session);
@@ -126,12 +136,11 @@ public class EditorServer {
             // 从集合中移除用户
             sessions.remove(session);
             log.info("用户 {} 离开文档 {}, 剩余在线人数: {}", session.getId(), docId, sessions.size());
-            
+
             // 如果该文档下没有用户了，可以选择清理 docSessions 中的条目
             if (sessions.isEmpty()) {
                 docSessions.remove(docId);
-                // 注意：通常不删除 docContent，以便下次用户进入时能恢复内容
-                // docContent.remove(docId); 
+                // 注意：这里不再删除文档内容，因为内容已经持久化在 Redis 中
             }
         }
     }
@@ -162,4 +171,3 @@ public class EditorServer {
         }
     }
 }
-
