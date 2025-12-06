@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CoDoc - 简易 WebSocket 测试客户端</title>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; margin-top: 20px; }
+        .container { width: 80%; max-width: 800px; }
+        #controls { margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
+        #status { font-weight: bold; }
+        #editor { width: 100%; height: 400px; font-size: 16px; line-height: 1.5; }
+        .connected { color: green; }
+        .disconnected { color: red; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>CoDoc - 实时协作编辑器 (测试)</h1>
+
+    <div id="controls">
+        <label for="docId">文档ID:</label>
+        <input type="text" id="docId" value="doc-1">
+        <button id="connectBtn">连接</button>
+        <span>状态: <span id="status" class="disconnected">未连接</span></span>
+    </div>
+
+    <textarea id="editor" placeholder="连接后在此处输入..."></textarea>
+</div>
+
+<script>
+    const docIdInput = document.getElementById('docId');
+    const connectBtn = document.getElementById('connectBtn');
+    const statusSpan = document.getElementById('status');
+    const editorTextarea = document.getElementById('editor');
+
+    let socket = null;
+    // a-flag-to-prevent-the-onmessage-handler-from-triggering-an-infinite-loop
+    let isTyping = false;
+
+    connectBtn.addEventListener('click', () => {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            console.log('Already connected.');
+            return;
+        }
+
+        const docId = docIdInput.value.trim();
+        if (!docId) {
+            alert('请输入文档ID');
+            return;
+        }
+
+        // 根据你的后端端口进行调整，这里假设是 8080
+        const wsUrl = `ws://${window.location.host}/editor/${docId}`;
+        socket = new WebSocket(wsUrl);
+
+        socket.onopen = () => {
+            console.log('WebSocket 连接成功！');
+            statusSpan.textContent = '已连接';
+            statusSpan.className = 'connected';
+            editorTextarea.disabled = false;
+        };
+
+        socket.onmessage = (event) => {
+            console.log('收到消息:', event.data);
+            // 当收到消息时，我们不希望触发 oninput 事件再次发送消息
+            isTyping = true;
+            editorTextarea.value = event.data;
+            // 恢复标志
+            setTimeout(() => { isTyping = false; }, 50);
+        };
+
+        socket.onclose = () => {
+            console.log('WebSocket 连接已关闭。');
+            statusSpan.textContent = '已断开';
+            statusSpan.className = 'disconnected';
+            editorTextarea.disabled = true;
+            socket = null;
+        };
+
+        socket.onerror = (error) => {
+            console.error('WebSocket 发生错误:', error);
+            statusSpan.textContent = '连接错误';
+            statusSpan.className = 'disconnected';
+            editorTextarea.disabled = true;
+        };
+    });
+
+    editorTextarea.addEventListener('input', () => {
+        if (socket && socket.readyState === WebSocket.OPEN && !isTyping) {
+            console.log('发送消息:', editorTextarea.value);
+            socket.send(editorTextarea.value);
+        }
+    });
+
+    // 页面加载时禁用文本区
+    editorTextarea.disabled = true;
+
+</script>
+
+</body>
+</html>
+

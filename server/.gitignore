@@ -1,0 +1,27 @@
+# Maven 构建产物
+target/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# 日志
+logs/
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# Spring Boot
+*.pid
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# 本地配置
+application-local.properties
+application-local.yml
+

@@ -1,0 +1,4 @@
+2025/12/06 11:20:01 [emerg] 23452#896: CreateDirectory() "E:\Develop\projects\collaborative-editor\nginx/temp/client_body_temp" failed (3: The system cannot find the path specified)
+2025/12/06 11:20:48 [emerg] 20296#7728: CreateDirectory() "E:\Develop\projects\collaborative-editor\nginx/temp/client_body_temp" failed (3: The system cannot find the path specified)
+2025/12/06 11:22:38 [notice] 26256#25768: signal process started
+2025/12/06 11:37:20 [notice] 24000#25508: signal process started
