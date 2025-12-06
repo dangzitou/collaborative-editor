@@ -37,3 +37,10 @@ build/
 
 ### Mac OS ###
 .DS_Store
+
+### Nginx ###
+nginx/nginx.exe
+nginx/conf/mime.types
+nginx/logs/
+nginx/temp/
+nginx/html/

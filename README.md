@@ -235,30 +235,52 @@ npm run build
 
 ## Nginx 部署指南
 
-### 下载 Nginx
+### 首次配置
+
+项目已包含 Nginx 配置文件和启动脚本，只需下载 Nginx 二进制文件即可。
 
 1. 访问 http://nginx.org/en/download.html
 2. 下载 Windows 版本（如 `nginx-1.24.0.zip`）
 3. 解压后，复制以下文件到 `nginx/` 目录：
-   - `nginx.exe` -> `nginx/nginx.exe`
-   - `conf/mime.types` -> `nginx/conf/mime.types`
+
+| 源文件 | 目标位置 |
+|--------|----------|
+| `nginx.exe` | `nginx/nginx.exe` |
+| `conf/mime.types` | `nginx/conf/mime.types` |
+
+4. 创建运行时目录（如果不存在）：
+
+```bash
+cd nginx
+mkdir logs
+mkdir temp
+mkdir temp\client_body_temp
+mkdir temp\proxy_temp
+mkdir temp\fastcgi_temp
+mkdir temp\uwsgi_temp
+mkdir temp\scgi_temp
+```
 
 ### 目录结构
 
-确保 `nginx/` 目录结构如下：
-
 ```
 nginx/
-├── nginx.exe           # Nginx 主程序（需下载）
+├── nginx.exe           # [需下载] Nginx 主程序
 ├── conf/
-│   ├── nginx.conf      # 配置文件（已存在）
-│   └── mime.types      # MIME 类型（需下载）
-├── logs/               # 日志目录
-├── temp/               # 临时文件目录
-├── start.bat           # 启动脚本
-├── stop.bat            # 停止脚本
-└── reload.bat          # 重载配置
+│   ├── nginx.conf      # [已配置] 服务器配置
+│   └── mime.types      # [需下载] MIME 类型
+├── logs/               # [自动生成] 日志目录
+├── temp/               # [自动生成] 临时文件目录
+├── start.bat           # [已配置] 启动脚本
+├── stop.bat            # [已配置] 停止脚本
+├── reload.bat          # [已配置] 重载配置
+└── setup.bat           # [已配置] 安装脚本
 ```
+
+说明：
+- [需下载] - 需要从 Nginx 官网下载
+- [已配置] - 已在仓库中，无需修改
+- [自动生成] - 运行时自动创建
 
 ### 启动 Nginx
 
