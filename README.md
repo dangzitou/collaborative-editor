@@ -11,7 +11,7 @@ GitHub 仓库: https://github.com/dangzitou/collaborative-editor
 1. [项目结构](#项目结构)
 2. [技术栈](#技术栈)
 3. [环境要求](#环境要求)
-4. [数据库配置](#数据库配置)
+4. [数据存储配置](#数据存储配置)
 5. [快速开始](#快速开始)
 6. [后端开发指南](#后端开发指南)
 7. [前端开发指南](#前端开发指南)
@@ -66,6 +66,7 @@ collaborative-editor/
 - WebSocket (JSR-356 / Jakarta WebSocket)
 - Spring Security + JWT 认证
 - MyBatis + MySQL 数据库
+- Redis (缓存与实时数据缓冲)
 - Jackson JSON
 - SLF4J + Logback 日志
 
@@ -88,7 +89,8 @@ collaborative-editor/
 | JDK | 21+ | 后端运行环境 |
 | Node.js | 18+ | 前端构建工具 |
 | npm | 9+ | 包管理器 |
-| MySQL | 8.0+ | 数据库 |
+| MySQL | 8.0+ | 关系型数据库 |
+| Redis | 5.0+ | 缓存数据库 |
 
 ### 可选
 
@@ -101,9 +103,11 @@ collaborative-editor/
 
 ---
 
-## 数据库配置
+## 数据存储配置
 
-### 1. 启动 MySQL
+### 1. MySQL 配置
+
+#### 1.1 启动 MySQL
 
 在 VS Code 终端（PowerShell）中输入：
 
@@ -115,7 +119,7 @@ mysql -u root -p --default-character-set=utf8mb4
 - `root` 替换为你自己的 MySQL 用户名
 - 输入密码后进入 MySQL 命令行
 
-### 2. 执行初始化脚本
+#### 1.2 执行初始化脚本
 
 在 MySQL 命令行中执行：
 
@@ -125,9 +129,27 @@ source server/src/main/resources/sql/init.sql
 
 或者复制 `init.sql` 中的内容手动执行。
 
-### 3. 修改数据库配置
+### 2. Redis 配置
 
-编辑 `server/src/main/resources/application.properties`：
+本项目使用 Redis 作为实时文档内容的缓冲区（Write-Behind 模式），以提高写入性能。
+
+#### 2.1 安装与启动
+请确保本地或服务器已安装 Redis 并启动服务。默认端口为 `6379`。
+
+#### 2.2 配置连接
+在 `server/src/main/resources/application-dev.properties` (开发环境) 或 `application-prod.properties` (生产环境) 中配置：
+
+```properties
+# Redis Configuration
+spring.data.redis.host=localhost
+spring.data.redis.port=6379
+spring.data.redis.password=123456
+spring.data.redis.database=1
+```
+
+### 3. 修改数据库连接配置
+
+编辑 `server/src/main/resources/application-dev.properties`：
 
 ```properties
 # 数据库连接配置
