@@ -1,6 +1,8 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useWebSocket } from './composables/useWebSocket'
+import { useAuth } from './composables/useAuth'
+import AuthModal from './components/AuthModal.vue'
 
 const {
   isConnected,
@@ -10,14 +12,24 @@ const {
   sendJson
 } = useWebSocket()
 
+const { user, isLoggedIn, logout } = useAuth()
+
+// 登录弹窗
+const showAuthModal = ref(false)
+const showUserMenu = ref(false)
+
 // 文档信息
 const docTitle = ref('未命名文档')
 const docId = ref('doc-001')
 const serverUrl = ref('ws://localhost:8080/editor/')
-const username = ref('用户' + Math.floor(Math.random() * 1000))
 const content = ref('')
 const isEditingTitle = ref(false)
 const showDebugPanel = ref(false)
+
+// 当前用户名（登录后使用真实用户名）
+const currentUsername = computed(() => {
+  return isLoggedIn.value ? (user.value?.nickname || user.value?.username) : '游客'
+})
 
 // 模拟在线用户
 const onlineUsers = ref([])
@@ -25,7 +37,7 @@ const onlineUsers = ref([])
 // 连接处理
 function handleConnect() {
   connect(serverUrl.value + docId.value)
-  onlineUsers.value = [{ name: username.value, color: '#1a73e8' }]
+  onlineUsers.value = [{ name: currentUsername.value, color: '#1a73e8' }]
 }
 
 function handleDisconnect() {
@@ -33,11 +45,20 @@ function handleDisconnect() {
   onlineUsers.value = []
 }
 
+// 用户菜单
+function handleLogout() {
+  logout()
+  showUserMenu.value = false
+  if (isConnected.value) {
+    disconnect()
+  }
+}
+
 // 编辑内容
 let isReceiving = false
 function handleInput() {
   if (!isReceiving && isConnected.value) {
-    sendJson('EDIT', username.value, content.value)
+    sendJson('EDIT', currentUsername.value, content.value)
   }
 }
 
@@ -122,8 +143,33 @@ function getInitial(name) {
             <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 6c1.4 0 2.8 1.1 2.8 2.5V11c.6.3 1 .8 1 1.5v3c0 .8-.7 1.5-1.5 1.5h-4.5c-.8 0-1.5-.7-1.5-1.5v-3c0-.7.4-1.2 1-1.5V9.5C9.2 8.1 10.6 7 12 7zm0 1.2c-.8 0-1.5.5-1.5 1.3v1.5h3V9.5c0-.8-.7-1.3-1.5-1.3z"/>
           </svg>
         </button>
+
+        <!-- 登录/用户信息 -->
+        <div v-if="!isLoggedIn" class="auth-buttons">
+          <button class="btn-login" @click="showAuthModal = true">登录</button>
+        </div>
+        <div v-else class="user-menu-wrapper">
+          <button class="user-menu-btn" @click="showUserMenu = !showUserMenu">
+            <div class="current-user-avatar">{{ getInitial(currentUsername) }}</div>
+            <span class="current-user-name">{{ currentUsername }}</span>
+          </button>
+          <div v-if="showUserMenu" class="user-dropdown">
+            <div class="dropdown-header">
+              <div class="dropdown-avatar">{{ getInitial(currentUsername) }}</div>
+              <div class="dropdown-info">
+                <div class="dropdown-name">{{ currentUsername }}</div>
+                <div class="dropdown-username">@{{ user?.username }}</div>
+              </div>
+            </div>
+            <div class="dropdown-divider"></div>
+            <button class="dropdown-item" @click="handleLogout">退出登录</button>
+          </div>
+        </div>
       </div>
     </header>
+
+    <!-- 登录弹窗 -->
+    <AuthModal :visible="showAuthModal" @close="showAuthModal = false" />
 
     <!-- 工具栏 -->
     <div class="toolbar">
@@ -171,8 +217,8 @@ function getInitial(name) {
             <input v-model="docId" :disabled="isConnected">
           </div>
           <div class="form-item">
-            <label>用户名</label>
-            <input v-model="username" :disabled="isConnected">
+            <label>当前用户</label>
+            <input :value="currentUsername" disabled>
           </div>
           <button
             v-if="!isConnected"
@@ -329,6 +375,137 @@ function getInitial(name) {
   margin-left: 8px;
   font-size: 13px;
   color: #5f6368;
+}
+
+/* 登录按钮 */
+.auth-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-login {
+  padding: 8px 24px;
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-login:hover {
+  background: #1557b0;
+}
+
+/* 用户菜单 */
+.user-menu-wrapper {
+  position: relative;
+}
+
+.user-menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.user-menu-btn:hover {
+  background: #f1f3f4;
+}
+
+.current-user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #1a73e8;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.current-user-name {
+  font-size: 14px;
+  color: #202124;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  min-width: 200px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.dropdown-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #1a73e8;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.dropdown-info {
+  flex: 1;
+}
+
+.dropdown-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #202124;
+}
+
+.dropdown-username {
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #e0e0e0;
+}
+
+.dropdown-item {
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  font-size: 14px;
+  color: #202124;
+  cursor: pointer;
+}
+
+.dropdown-item:hover {
+  background: #f1f3f4;
 }
 
 .btn-icon {

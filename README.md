@@ -11,12 +11,14 @@ GitHub 仓库: https://github.com/dangzitou/collaborative-editor
 1. [项目结构](#项目结构)
 2. [技术栈](#技术栈)
 3. [环境要求](#环境要求)
-4. [快速开始](#快速开始)
-5. [后端开发指南](#后端开发指南)
-6. [前端开发指南](#前端开发指南)
-7. [Nginx 部署指南](#nginx-部署指南)
-8. [WebSocket API](#websocket-api)
-9. [协作开发流程](#协作开发流程)
+4. [数据库配置](#数据库配置)
+5. [快速开始](#快速开始)
+6. [后端开发指南](#后端开发指南)
+7. [前端开发指南](#前端开发指南)
+8. [Nginx 部署指南](#nginx-部署指南)
+9. [WebSocket API](#websocket-api)
+10. [REST API](#rest-api)
+11. [协作开发流程](#协作开发流程)
 
 ---
 
@@ -62,7 +64,10 @@ collaborative-editor/
 - Java 21
 - Spring Boot 3.2.5
 - WebSocket (JSR-356 / Jakarta WebSocket)
+- Spring Security + JWT 认证
+- MyBatis + MySQL 数据库
 - Jackson JSON
+- SLF4J + Logback 日志
 
 ### 前端
 - Vite 7.x
@@ -83,6 +88,7 @@ collaborative-editor/
 | JDK | 21+ | 后端运行环境 |
 | Node.js | 18+ | 前端构建工具 |
 | npm | 9+ | 包管理器 |
+| MySQL | 8.0+ | 数据库 |
 
 ### 可选
 
@@ -95,6 +101,56 @@ collaborative-editor/
 
 ---
 
+## 数据库配置
+
+### 1. 启动 MySQL
+
+在 VS Code 终端（PowerShell）中输入：
+
+```powershell
+mysql -u root -p --default-character-set=utf8mb4
+```
+
+说明：
+- `root` 替换为你自己的 MySQL 用户名
+- 输入密码后进入 MySQL 命令行
+
+### 2. 执行初始化脚本
+
+在 MySQL 命令行中执行：
+
+```sql
+source server/src/main/resources/sql/init.sql
+```
+
+或者复制 `init.sql` 中的内容手动执行。
+
+### 3. 修改数据库配置
+
+编辑 `server/src/main/resources/application.properties`：
+
+```properties
+# 数据库连接配置
+spring.datasource.url=jdbc:mysql://localhost:3306/codoc?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=utf8mb4
+spring.datasource.username=root
+spring.datasource.password=1234
+```
+
+根据你的实际情况修改：
+- `username`: 你的 MySQL 用户名
+- `password`: 你的 MySQL 密码
+- `url`: 如果端口不是 3306，需要修改
+
+### 数据库表结构
+
+| 表名 | 说明 |
+|------|------|
+| user | 用户表（用户名、密码、昵称、邮箱等） |
+| document | 文档表（文档ID、标题、内容、所有者等） |
+| document_collaborator | 文档协作者表（文档ID、用户ID、权限） |
+
+---
+
 ## 快速开始
 
 ### 1. 克隆项目
@@ -104,7 +160,11 @@ git clone https://github.com/dangzitou/collaborative-editor.git
 cd collaborative-editor
 ```
 
-### 2. 启动后端
+### 2. 配置数据库
+
+参考上方 [数据库配置](#数据库配置) 章节，初始化数据库并修改连接配置。
+
+### 3. 启动后端
 
 ```bash
 cd server
@@ -113,7 +173,7 @@ cd server
 
 后端服务将在 http://localhost:8080 启动。
 
-### 3. 启动前端（开发模式）
+### 4. 启动前端（开发模式）
 
 ```bash
 cd web
@@ -123,7 +183,7 @@ npm run dev
 
 前端将在 http://localhost:5173 启动，支持热更新。
 
-### 4. 测试协作功能
+### 5. 测试协作功能
 
 1. 打开浏览器访问 http://localhost:5173
 2. 点击右上角调试按钮打开调试面板
@@ -386,6 +446,71 @@ ws://localhost:8080/editor/{docId}
 3. 客户端编辑时发送 EDIT 消息
 4. 服务器将 EDIT 消息广播给同文档的其他用户
 5. 客户端断开时自动从会话中移除
+
+---
+
+## REST API
+
+### 认证接口
+
+#### 用户注册
+
+```
+POST /api/auth/register
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "123456",
+  "nickname": "测试用户"
+}
+```
+
+响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": null
+}
+```
+
+#### 用户登录
+
+```
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "123456"
+}
+```
+
+响应：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiJ9...",
+    "userId": 1,
+    "username": "testuser",
+    "nickname": "测试用户",
+    "avatar": null
+  }
+}
+```
+
+### 使用 Token
+
+登录成功后，在后续请求中携带 Token：
+
+```
+Authorization: Bearer <token>
+```
 
 ---
 

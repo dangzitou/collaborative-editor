@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="org.example.collaborative_editor.mapper.UserMapper">
+
+    <resultMap id="BaseResultMap" type="org.example.collaborative_editor.entity.User">
+        <id column="id" property="id"/>
+        <result column="username" property="username"/>
+        <result column="password" property="password"/>
+        <result column="nickname" property="nickname"/>
+        <result column="email" property="email"/>
+        <result column="avatar" property="avatar"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, username, password, nickname, email, avatar, status, created_at, updated_at
+    </sql>
+
+    <select id="findByUsername" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM user
+        WHERE username = #{username} AND status = 1
+    </select>
+
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM user
+        WHERE id = #{id} AND status = 1
+    </select>
+
+    <select id="existsByUsername" resultType="int">
+        SELECT COUNT(1) FROM user WHERE username = #{username}
+    </select>
+
+    <select id="existsByEmail" resultType="int">
+        SELECT COUNT(1) FROM user WHERE email = #{email}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user (username, password, nickname, email, avatar, status)
+        VALUES (#{username}, #{password}, #{nickname}, #{email}, #{avatar}, 1)
+    </insert>
+
+    <update id="update">
+        UPDATE user
+        <set>
+            <if test="nickname != null">nickname = #{nickname},</if>
+            <if test="email != null">email = #{email},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+            <if test="password != null">password = #{password},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+</mapper>
+
