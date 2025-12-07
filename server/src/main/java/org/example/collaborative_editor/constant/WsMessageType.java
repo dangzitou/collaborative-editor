@@ -31,6 +31,11 @@ public class WsMessageType {
     public static final String USER_LEAVE = "USER_LEAVE";
 
     /**
+     * 用户列表消息 - 发送当前在线用户列表
+     */
+    public static final String USER_LIST = "USER_LIST";
+
+    /**
      * 操作消息 - OT 算法操作（预留）
      */
     public static final String OPERATION = "OPERATION";
@@ -44,4 +49,3 @@ public class WsMessageType {
         // 私有构造方法，防止实例化
     }
 }
-

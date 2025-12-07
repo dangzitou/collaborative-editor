@@ -58,7 +58,7 @@ const onlineUsers = ref([])
 
 // 连接处理
 function handleConnect() {
-  const wsUrl = serverUrl.value + docId.value + '?token=' + token.value
+  const wsUrl = serverUrl.value + docId.value + '?token=' + token.value + '&username=' + encodeURIComponent(currentUsername.value)
   connect(wsUrl)
   onlineUsers.value = [{ name: currentUsername.value, color: '#1a73e8' }]
 }
@@ -91,18 +91,42 @@ watch(() => messages.value, (newMessages) => {
   const lastMsg = newMessages[newMessages.length - 1]
   if (lastMsg.type === 'received' && lastMsg.raw) {
     const data = typeof lastMsg.raw === 'object' ? lastMsg.raw : null
-    if (data && (data.type === 'SYNC' || data.type === 'EDIT')) {
+    if (!data) return
+
+    const colors = ['#ea4335', '#34a853', '#fbbc04', '#9c27b0', '#ff5722']
+
+    if (data.type === 'SYNC' || data.type === 'EDIT') {
       isReceiving = true
       content.value = data.data || ''
-      // 添加协作者
+      // 添加协作者 (兼容旧逻辑，防止 USER_LIST 失败)
       if (data.sender && data.sender !== 'server' && !onlineUsers.value.find(u => u.name === data.sender)) {
-        const colors = ['#ea4335', '#34a853', '#fbbc04', '#9c27b0', '#ff5722']
         onlineUsers.value.push({
           name: data.sender,
           color: colors[onlineUsers.value.length % colors.length]
         })
       }
       setTimeout(() => { isReceiving = false }, 50)
+    } else if (data.type === 'USER_JOIN') {
+      if (data.sender && data.sender !== 'server' && !onlineUsers.value.find(u => u.name === data.sender)) {
+        onlineUsers.value.push({
+          name: data.sender,
+          color: colors[onlineUsers.value.length % colors.length]
+        })
+      }
+    } else if (data.type === 'USER_LEAVE') {
+      onlineUsers.value = onlineUsers.value.filter(u => u.name !== data.sender)
+    } else if (data.type === 'USER_LIST') {
+      try {
+        const users = JSON.parse(data.data)
+        if (Array.isArray(users)) {
+          onlineUsers.value = users.map((name, index) => ({
+            name: name,
+            color: colors[index % colors.length]
+          }))
+        }
+      } catch (e) {
+        console.error('解析用户列表失败', e)
+      }
     }
   }
 }, { deep: true })

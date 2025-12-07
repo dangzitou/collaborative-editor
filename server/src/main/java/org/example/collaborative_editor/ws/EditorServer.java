@@ -16,7 +16,11 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.List;
+import java.util.stream.Collectors;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
@@ -83,17 +87,24 @@ public class EditorServer {
      */
     @OnOpen
     public void onOpen(Session session, @PathParam("docId") String docId) {
-        // 1. 解析 Token
+        // 1. 解析参数
         String queryString = session.getQueryString();
         String token = null;
+        String queryUsername = null;
         Long userId = null;
         String username = "匿名用户";
 
-        if (queryString != null && queryString.contains("token=")) {
-            for (String param : queryString.split("&")) {
+        if (queryString != null) {
+            String[] params = queryString.split("&");
+            for (String param : params) {
                 if (param.startsWith("token=")) {
                     token = param.substring(6);
-                    break;
+                } else if (param.startsWith("username=")) {
+                    try {
+                        queryUsername = URLDecoder.decode(param.substring(9), StandardCharsets.UTF_8.name());
+                    } catch (Exception e) {
+                        log.warn("解析用户名失败", e);
+                    }
                 }
             }
         }
@@ -103,7 +114,12 @@ public class EditorServer {
             try {
                 Claims claims = jwtUtil.parseToken(token);
                 userId = Long.valueOf(claims.get("userId").toString());
-                username = claims.getSubject();
+                // 优先使用前端传来的显示名称（昵称），否则使用 Token 中的用户名
+                if (queryUsername != null && !queryUsername.isEmpty()) {
+                    username = queryUsername;
+                } else {
+                    username = claims.getSubject();
+                }
                 // 设置到 BaseContext (虽然 WebSocket 是多线程，但 onOpen 在当前线程执行)
                 BaseContext.setCurrentId(userId);
             } catch (Exception e) {
@@ -129,6 +145,34 @@ public class EditorServer {
         docSessions.computeIfAbsent(docId, k -> new CopyOnWriteArraySet<>()).add(session);
 
         log.info("用户 {} (ID:{}) 加入文档 {}, 当前在线人数: {}", username, userId, docId, docSessions.get(docId).size());
+
+        // 1. 广播用户加入消息给其他人
+        try {
+            WsMessage joinMsg = new WsMessage();
+            joinMsg.setType(WsMessageType.USER_JOIN);
+            joinMsg.setSender(username);
+            broadcast(objectMapper.writeValueAsString(joinMsg), session);
+        } catch (IOException e) {
+            log.error("广播用户加入消息失败", e);
+        }
+
+        // 2. 发送当前在线用户列表给新用户
+        try {
+            List<String> userList = docSessions.get(docId).stream()
+                    .map(s -> (String) s.getUserProperties().get("username"))
+                    .filter(name -> name != null)
+                    .distinct()
+                    .collect(Collectors.toList());
+
+            WsMessage listMsg = new WsMessage();
+            listMsg.setType(WsMessageType.USER_LIST);
+            listMsg.setSender(WsMessageType.SENDER_SERVER);
+            listMsg.setData(objectMapper.writeValueAsString(userList));
+
+            session.getAsyncRemote().sendText(objectMapper.writeValueAsString(listMsg));
+        } catch (IOException e) {
+            log.error("发送用户列表失败", e);
+        }
 
         // 从 Redis 获取文档内容
         String content = (String) redisTemplate.opsForValue().get("doc:" + docId);
@@ -221,6 +265,18 @@ public class EditorServer {
             sessions.remove(session);
             log.info("用户 {} 离开文档 {}, 剩余在线人数: {}", username != null ? username : session.getId(), docId,
                     sessions.size());
+
+            // 广播用户离开消息
+            if (username != null) {
+                try {
+                    WsMessage leaveMsg = new WsMessage();
+                    leaveMsg.setType(WsMessageType.USER_LEAVE);
+                    leaveMsg.setSender(username);
+                    broadcast(objectMapper.writeValueAsString(leaveMsg), session);
+                } catch (IOException e) {
+                    log.error("广播用户离开消息失败", e);
+                }
+            }
 
             // 如果该文档下没有用户了，可以选择清理 docSessions 中的条目
             if (sessions.isEmpty()) {
