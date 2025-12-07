@@ -27,32 +27,37 @@ GitHub 仓库: https://github.com/dangzitou/collaborative-editor
 ```
 collaborative-editor/
 ├── server/                 # 后端服务 (Spring Boot)
-│   ├── src/
-│   │   └── main/
-│   │       ├── java/       # Java 源码
-│   │       └── resources/  # 配置文件
-│   ├── pom.xml
-│   └── .gitignore
+│   ├── src/main/java/org/example/collaborative_editor/
+│   │   ├── config/         # 全局配置 (WebSocket, Redis等)
+│   │   ├── controller/     # REST API 控制器
+│   │   ├── entity/         # 数据库实体类
+│   │   ├── mapper/         # MyBatis Mapper 接口
+│   │   ├── security/       # 安全配置与拦截器
+│   │   ├── service/        # 业务逻辑层
+│   │   ├── task/           # 定时任务 (Redis->MySQL同步)
+│   │   ├── util/           # 工具类 (JWT等)
+│   │   └── ws/             # WebSocket 服务端核心逻辑
+│   ├── src/main/resources/
+│   │   ├── mapper/         # MyBatis XML 文件
+│   │   └── application.properties
+│   └── pom.xml
 ├── web/                    # 前端客户端 (Vite + Vue 3)
 │   ├── src/
-│   │   ├── composables/    # 组合式函数
-│   │   ├── App.vue         # 主组件
+│   │   ├── components/     # Vue UI 组件 (AuthModal等)
+│   │   ├── composables/    # 组合式函数 (useWebSocket, useAuth)
+│   │   ├── App.vue         # 主应用组件
 │   │   ├── style.css       # 全局样式
-│   │   └── main.js         # 入口文件
-│   ├── dist/               # 构建产物（需 npm run build 生成）
-│   ├── package.json
-│   └── .gitignore
+│   │   └── main.js         # Vue 入口文件
+│   ├── index.html          # HTML 模板
+│   ├── vite.config.js      # Vite 配置
+│   └── package.json
 ├── nginx/                  # Nginx 配置和运行目录
 │   ├── conf/
 │   │   ├── nginx.conf      # Nginx 配置文件
-│   │   └── mime.types      # MIME 类型配置（需下载）
+│   │   └── mime.types      # MIME 类型配置
 │   ├── logs/               # 日志目录
-│   ├── temp/               # 临时文件目录
-│   ├── html/               # 备用静态文件目录
-│   ├── nginx.exe           # Nginx 主程序（需下载）
-│   ├── start.bat           # 启动脚本
-│   ├── stop.bat            # 停止脚本
-│   └── reload.bat          # 重载配置脚本
+│   ├── nginx.exe           # Nginx 主程序
+│   └── start.bat           # 启动脚本
 └── README.md
 ```
 
@@ -87,10 +92,22 @@ collaborative-editor/
 | 工具 | 版本 | 说明 |
 |------|------|------|
 | JDK | 21+ | 后端运行环境 |
+| Maven | 3.6+ | Java 项目构建工具 |
 | Node.js | 18+ | 前端构建工具 |
 | npm | 9+ | 包管理器 |
 | MySQL | 8.0+ | 关系型数据库 |
 | Redis | 5.0+ | 缓存数据库 |
+
+### Maven 安装说明
+
+如果你的电脑未安装 Maven（运行 `mvn -v` 报错），请按照以下步骤安装：
+
+1. **下载**: 访问 [Maven 官网](https://maven.apache.org/download.cgi) 下载 `Binary zip archive`。
+2. **解压**: 将压缩包解压到任意目录（例如 `D:\maven`）。
+3. **配置环境变量**:
+   - 新建系统变量 `MAVEN_HOME`，值为解压目录。
+   - 在 `Path` 变量中添加 `%MAVEN_HOME%\bin`。
+4. **验证**: 打开新的 CMD/PowerShell，输入 `mvn -v`，显示版本号即成功。
 
 ### 可选
 
