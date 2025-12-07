@@ -6,9 +6,11 @@ import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
 import lombok.extern.slf4j.Slf4j;
 import org.example.collaborative_editor.constant.WsMessageType;
+import org.example.collaborative_editor.context.BaseContext;
 import org.example.collaborative_editor.dto.WsMessage;
 import org.example.collaborative_editor.entity.Document;
 import org.example.collaborative_editor.service.DocumentService;
+import org.example.collaborative_editor.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
@@ -18,6 +20,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
+import io.jsonwebtoken.Claims;
 
 /**
  * 协作编辑器 WebSocket 服务端
@@ -50,6 +53,8 @@ public class EditorServer {
 
     private static DocumentService documentService;
 
+    private static JwtUtil jwtUtil;
+
     @Autowired
     public void setObjectMapper(ObjectMapper objectMapper) {
         EditorServer.objectMapper = objectMapper;
@@ -65,6 +70,11 @@ public class EditorServer {
         EditorServer.documentService = documentService;
     }
 
+    @Autowired
+    public void setJwtUtil(JwtUtil jwtUtil) {
+        EditorServer.jwtUtil = jwtUtil;
+    }
+
     /**
      * 连接建立时调用。
      *
@@ -73,14 +83,52 @@ public class EditorServer {
      */
     @OnOpen
     public void onOpen(Session session, @PathParam("docId") String docId) {
-        // 将 docId 存入 Session 属性，避免单例模式下的线程安全问题
+        // 1. 解析 Token
+        String queryString = session.getQueryString();
+        String token = null;
+        Long userId = null;
+        String username = "匿名用户";
+
+        if (queryString != null && queryString.contains("token=")) {
+            for (String param : queryString.split("&")) {
+                if (param.startsWith("token=")) {
+                    token = param.substring(6);
+                    break;
+                }
+            }
+        }
+
+        // 2. 验证 Token
+        if (token != null) {
+            try {
+                Claims claims = jwtUtil.parseToken(token);
+                userId = Long.valueOf(claims.get("userId").toString());
+                username = claims.getSubject();
+                // 设置到 BaseContext (虽然 WebSocket 是多线程，但 onOpen 在当前线程执行)
+                BaseContext.setCurrentId(userId);
+            } catch (Exception e) {
+                log.warn("WebSocket Token 验证失败: {}", e.getMessage());
+                try {
+                    session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY, "Invalid Token"));
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+                return;
+            }
+        }
+
+        // 将 docId 和用户信息存入 Session 属性
         session.getUserProperties().put("docId", docId);
+        if (userId != null) {
+            session.getUserProperties().put("userId", userId);
+            session.getUserProperties().put("username", username);
+        }
 
         // 将用户加入对应文档的集合
         // computeIfAbsent 保证原子性：如果集合不存在则创建，存在则返回
         docSessions.computeIfAbsent(docId, k -> new CopyOnWriteArraySet<>()).add(session);
 
-        log.info("用户 {} 加入文档 {}, 当前在线人数: {}", session.getId(), docId, docSessions.get(docId).size());
+        log.info("用户 {} (ID:{}) 加入文档 {}, 当前在线人数: {}", username, userId, docId, docSessions.get(docId).size());
 
         // 从 Redis 获取文档内容
         String content = (String) redisTemplate.opsForValue().get("doc:" + docId);
@@ -116,6 +164,9 @@ public class EditorServer {
                 log.error("发送同步消息失败", e);
             }
         }
+
+        // 清理 BaseContext
+        BaseContext.removeCurrentId();
     }
 
     /**
@@ -159,6 +210,7 @@ public class EditorServer {
     @OnClose
     public void onClose(Session session) {
         String docId = (String) session.getUserProperties().get("docId");
+        String username = (String) session.getUserProperties().get("username");
         if (docId == null) {
             return;
         }
@@ -167,7 +219,8 @@ public class EditorServer {
         if (sessions != null) {
             // 从集合中移除用户
             sessions.remove(session);
-            log.info("用户 {} 离开文档 {}, 剩余在线人数: {}", session.getId(), docId, sessions.size());
+            log.info("用户 {} 离开文档 {}, 剩余在线人数: {}", username != null ? username : session.getId(), docId,
+                    sessions.size());
 
             // 如果该文档下没有用户了，可以选择清理 docSessions 中的条目
             if (sessions.isEmpty()) {
@@ -202,8 +255,15 @@ public class EditorServer {
         if (sessions != null) {
             for (Session s : sessions) {
                 // 排除发送者自己，并且只发送给打开的连接
-                if (!s.getId().equals(sender.getId()) && s.isOpen()) {
-                    s.getAsyncRemote().sendText(data);
+                try {
+                    if (!s.getId().equals(sender.getId()) && s.isOpen()) {
+                        // 使用 synchronized 避免并发发送导致 IllegalStateException
+                        synchronized (s) {
+                            s.getBasicRemote().sendText(data);
+                        }
+                    }
+                } catch (IOException e) {
+                    log.error("广播消息失败: sessionId={}", s.getId(), e);
                 }
             }
         }

@@ -1,12 +1,19 @@
 package org.example.collaborative_editor.entity;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+
 import java.time.LocalDateTime;
 
 /**
  * 文档实体
  */
 @Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class Document {
 
     private Long id;

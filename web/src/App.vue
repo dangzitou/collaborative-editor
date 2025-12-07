@@ -36,7 +36,8 @@ const onlineUsers = ref([])
 
 // 连接处理
 function handleConnect() {
-  connect(serverUrl.value + docId.value)
+  const wsUrl = serverUrl.value + docId.value + '?token=' + token.value
+  connect(wsUrl)
   onlineUsers.value = [{ name: currentUsername.value, color: '#1a73e8' }]
 }
 

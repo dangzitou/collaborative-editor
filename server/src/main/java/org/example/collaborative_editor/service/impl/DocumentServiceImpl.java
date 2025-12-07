@@ -34,13 +34,13 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional
     public Document createDocument(String title, Long userId) {
-        Document document = new Document();
-        document.setDocId(UUID.randomUUID().toString());
-        document.setTitle(title);
-        document.setOwnerId(userId);
-        document.setStatus(StatusConstant.ENABLE);
-        document.setContent(""); // 初始内容为空
-
+        Document document = Document.builder()
+                                    .title(title)
+                                    .docId(UUID.randomUUID().toString())
+                                    .ownerId(userId)
+                                    .status(StatusConstant.ENABLE)
+                                    .content("")
+                                    .build(); // 默认内容为空
         documentMapper.insert(document);
         return document;
     }
@@ -153,10 +153,11 @@ public class DocumentServiceImpl implements DocumentService {
         Collaborator collaborator = collaboratorMapper.getByDocIdAndUserId(docId, currentUserId);
         if (collaborator == null) {
             // 添加协作者记录
-            collaborator = new Collaborator();
-            collaborator.setDocId(docId);
-            collaborator.setUserId(currentUserId);
-            collaborator.setCreateTime(LocalDateTime.now());
+            collaborator = Collaborator.builder()
+                    .docId(docId)
+                    .userId(currentUserId)
+                    .createTime(LocalDateTime.now())
+                    .build();
             collaboratorMapper.insert(collaborator);
         }
 
