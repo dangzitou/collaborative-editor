@@ -20,4 +20,12 @@
         where doc_id = #{docId}
     </update>
 
+    <select id="listByIds" resultType="org.example.collaborative_editor.entity.Document">
+        select * from document where status = 1 and doc_id in
+        <foreach collection="docIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        order by update_time desc
+    </select>
+
 </mapper>

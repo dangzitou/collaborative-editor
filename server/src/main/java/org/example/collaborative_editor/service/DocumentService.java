@@ -28,4 +28,14 @@ public interface DocumentService {
      * 删除文档
      */
     void deleteDocument(String docId);
+
+    /**
+     * 生成邀请码
+     */
+    String createInviteCode(String docId);
+
+    /**
+     * 使用邀请码加入文档
+     */
+    Document joinByInviteCode(String code);
 }

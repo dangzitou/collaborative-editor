@@ -7,6 +7,8 @@ import jakarta.websocket.server.ServerEndpoint;
 import lombok.extern.slf4j.Slf4j;
 import org.example.collaborative_editor.constant.WsMessageType;
 import org.example.collaborative_editor.dto.WsMessage;
+import org.example.collaborative_editor.entity.Document;
+import org.example.collaborative_editor.service.DocumentService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
@@ -15,6 +17,7 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 协作编辑器 WebSocket 服务端
@@ -45,6 +48,8 @@ public class EditorServer {
      */
     private static RedisTemplate<String, Object> redisTemplate;
 
+    private static DocumentService documentService;
+
     @Autowired
     public void setObjectMapper(ObjectMapper objectMapper) {
         EditorServer.objectMapper = objectMapper;
@@ -55,11 +60,10 @@ public class EditorServer {
         EditorServer.redisTemplate = redisTemplate;
     }
 
-    /**
-     * 当前连接所属的文档 ID。
-     * 每个 WebSocket 连接实例都有自己的 docId。
-     */
-    private String docId;
+    @Autowired
+    public void setDocumentService(DocumentService documentService) {
+        EditorServer.documentService = documentService;
+    }
 
     /**
      * 连接建立时调用。
@@ -69,7 +73,8 @@ public class EditorServer {
      */
     @OnOpen
     public void onOpen(Session session, @PathParam("docId") String docId) {
-        this.docId = docId;
+        // 将 docId 存入 Session 属性，避免单例模式下的线程安全问题
+        session.getUserProperties().put("docId", docId);
 
         // 将用户加入对应文档的集合
         // computeIfAbsent 保证原子性：如果集合不存在则创建，存在则返回
@@ -79,6 +84,23 @@ public class EditorServer {
 
         // 从 Redis 获取文档内容
         String content = (String) redisTemplate.opsForValue().get("doc:" + docId);
+
+        // 如果 Redis 中没有，尝试从数据库加载
+        if (content == null) {
+            try {
+                Document doc = documentService.getDocument(docId);
+                if (doc != null) {
+                    content = doc.getContent();
+                    if (content == null) {
+                        content = "";
+                    }
+                    // 回写到 Redis，设置过期时间（例如24小时）
+                    redisTemplate.opsForValue().set("doc:" + docId, content, 24, TimeUnit.HOURS);
+                }
+            } catch (Exception e) {
+                log.warn("加载文档失败: {}", docId);
+            }
+        }
 
         // 如果该文档已有内容，立即发送一条 type: "SYNC" 的消息给新用户
         if (content != null) {
@@ -104,6 +126,11 @@ public class EditorServer {
      */
     @OnMessage
     public void onMessage(String messageStr, Session session) {
+        String docId = (String) session.getUserProperties().get("docId");
+        if (docId == null) {
+            return;
+        }
+
         try {
             // 解析收到的 JSON 消息
             WsMessage msg = objectMapper.readValue(messageStr, WsMessage.class);
@@ -131,6 +158,11 @@ public class EditorServer {
      */
     @OnClose
     public void onClose(Session session) {
+        String docId = (String) session.getUserProperties().get("docId");
+        if (docId == null) {
+            return;
+        }
+
         CopyOnWriteArraySet<Session> sessions = docSessions.get(docId);
         if (sessions != null) {
             // 从集合中移除用户
@@ -150,6 +182,7 @@ public class EditorServer {
      */
     @OnError
     public void onError(Session session, Throwable error) {
+        String docId = (String) session.getUserProperties().get("docId");
         log.error("WebSocket 错误: docId={}, sessionId={}, error={}", docId, session.getId(), error.getMessage());
     }
 
@@ -160,6 +193,11 @@ public class EditorServer {
      * @param sender 发送者的 Session（将被排除）
      */
     private void broadcast(String data, Session sender) {
+        String docId = (String) sender.getUserProperties().get("docId");
+        if (docId == null) {
+            return;
+        }
+
         CopyOnWriteArraySet<Session> sessions = docSessions.get(docId);
         if (sessions != null) {
             for (Session s : sessions) {

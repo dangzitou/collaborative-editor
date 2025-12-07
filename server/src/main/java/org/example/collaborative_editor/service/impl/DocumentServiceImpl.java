@@ -8,13 +8,19 @@ import org.example.collaborative_editor.constant.MessageConstant;
 import org.example.collaborative_editor.constant.StatusConstant;
 import org.example.collaborative_editor.entity.Document;
 import org.example.collaborative_editor.exception.BusinessException;
+import org.example.collaborative_editor.entity.Collaborator;
+import org.example.collaborative_editor.mapper.CollaboratorMapper;
 import org.example.collaborative_editor.mapper.DocumentMapper;
 import org.example.collaborative_editor.service.DocumentService;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -22,6 +28,7 @@ import java.util.UUID;
 public class DocumentServiceImpl implements DocumentService {
 
     private final DocumentMapper documentMapper;
+    private final CollaboratorMapper collaboratorMapper;
     private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
@@ -58,7 +65,27 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     public java.util.List<Document> listDocuments(Long userId) {
-        return documentMapper.listByOwnerId(userId);
+        // 1. 获取自己创建的文档
+        List<Document> myDocs = documentMapper.listByOwnerId(userId);
+
+        // 2. 获取参与协作的文档
+        List<String> collabDocIds = collaboratorMapper.listDocIdsByUserId(userId);
+        List<Document> collabDocs = new ArrayList<>();
+        if (collabDocIds != null && !collabDocIds.isEmpty()) {
+            collabDocs = documentMapper.listByIds(collabDocIds);
+        }
+
+        // 3. 合并列表
+        List<Document> result = new ArrayList<>();
+        if (myDocs != null)
+            result.addAll(myDocs);
+        if (collabDocs != null)
+            result.addAll(collabDocs);
+
+        // 按时间排序（简单处理，如果需要严格排序可以在内存中sort）
+        result.sort((d1, d2) -> d2.getUpdateTime().compareTo(d1.getUpdateTime()));
+
+        return result;
     }
 
     @Override
@@ -79,5 +106,60 @@ public class DocumentServiceImpl implements DocumentService {
         // 删除Redis缓存
         redisTemplate.delete("doc:" + docId);
         redisTemplate.opsForSet().remove("dirty_docs", docId);
+    }
+
+    @Override
+    public String createInviteCode(String docId) {
+        // 检查文档是否存在
+        Document document = documentMapper.getByDocId(docId);
+        if (document == null) {
+            throw new BusinessException(MessageConstant.DOCUMENT_NOT_FOUND);
+        }
+        // 检查权限（只有拥有者可以生成邀请码）
+        Long currentUserId = BaseContext.getCurrentId();
+        if (!document.getOwnerId().equals(currentUserId)) {
+            throw new BusinessException(MessageConstant.DOCUMENT_NO_PERMISSION);
+        }
+
+        // 生成随机码
+        String code = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+        // 存入Redis，有效期24小时
+        redisTemplate.opsForValue().set("invite:" + code, docId, 24, TimeUnit.HOURS);
+        return code;
+    }
+
+    @Override
+    @Transactional
+    public Document joinByInviteCode(String code) {
+        // 验证邀请码
+        String docId = (String) redisTemplate.opsForValue().get("invite:" + code);
+        if (docId == null) {
+            throw new BusinessException("邀请码无效或已过期");
+        }
+
+        // 检查文档
+        Document document = documentMapper.getByDocId(docId);
+        if (document == null) {
+            throw new BusinessException(MessageConstant.DOCUMENT_NOT_FOUND);
+        }
+
+        Long currentUserId = BaseContext.getCurrentId();
+        // 如果是拥有者，直接返回
+        if (document.getOwnerId().equals(currentUserId)) {
+            return document;
+        }
+
+        // 检查是否已经是协作者
+        Collaborator collaborator = collaboratorMapper.getByDocIdAndUserId(docId, currentUserId);
+        if (collaborator == null) {
+            // 添加协作者记录
+            collaborator = new Collaborator();
+            collaborator.setDocId(docId);
+            collaborator.setUserId(currentUserId);
+            collaborator.setCreateTime(LocalDateTime.now());
+            collaboratorMapper.insert(collaborator);
+        }
+
+        return document;
     }
 }

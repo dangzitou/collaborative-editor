@@ -97,6 +97,10 @@ const showListModal = ref(false)
 const docList = ref([])
 const showDeleteModal = ref(false)
 const docToDelete = ref(null)
+const showJoinModal = ref(false)
+const inviteCode = ref('')
+const showShareModal = ref(false)
+const currentInviteCode = ref('')
 
 async function openCreateModal() {
   if (!isLoggedIn.value) {
@@ -171,6 +175,51 @@ async function fetchDocList() {
 function deleteDoc(doc) {
   docToDelete.value = doc
   showDeleteModal.value = true
+}
+
+async function handleJoinDoc() {
+  if (!inviteCode.value) return
+  try {
+    const res = await fetch('http://localhost:8080/api/doc/join', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token.value
+      },
+      body: JSON.stringify({ code: inviteCode.value })
+    })
+    const data = await res.json()
+    if (data.code === 200) {
+      openDoc(data.data)
+      showJoinModal.value = false
+      inviteCode.value = ''
+    } else {
+      alert(data.message || '加入失败')
+    }
+  } catch (e) {
+    console.error(e)
+    alert('加入失败')
+  }
+}
+
+async function handleShare() {
+  if (!docId.value) return
+  try {
+    const res = await fetch(`http://localhost:8080/api/doc/${docId.value}/invite`, {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token.value }
+    })
+    const data = await res.json()
+    if (data.code === 200) {
+      currentInviteCode.value = data.data
+      showShareModal.value = true
+    } else {
+      alert(data.message || '生成邀请码失败')
+    }
+  } catch (e) {
+    console.error(e)
+    alert('生成邀请码失败')
+  }
 }
 
 async function confirmDelete() {
@@ -259,6 +308,7 @@ onMounted(async () => {
         <div v-if="isLoggedIn" style="display: flex; gap: 8px; margin-right: 15px;">
           <button class="btn-primary" @click="openCreateModal" style="padding: 6px 12px; font-size: 14px;">新建</button>
           <button class="btn-secondary" @click="fetchDocList" style="padding: 6px 12px; font-size: 14px;">我的文档</button>
+          <button class="btn-secondary" @click="showJoinModal = true" style="padding: 6px 12px; font-size: 14px;">加入协作</button>
         </div>
         <div class="doc-info">
           <div class="doc-title" v-if="!isEditingTitle" @click="isEditingTitle = true">
@@ -280,6 +330,11 @@ onMounted(async () => {
       </div>
 
       <div class="navbar-right">
+        <!-- 分享按钮 -->
+        <button v-if="isConnected" class="btn-primary" @click="handleShare" style="margin-right: 10px; padding: 6px 16px;">
+          分享
+        </button>
+
         <!-- 在线用户 -->
         <div class="online-users" v-if="onlineUsers.length > 0">
           <div
@@ -436,6 +491,35 @@ onMounted(async () => {
         <div class="modal-actions">
           <button class="btn-secondary" @click="showCreateModal = false">取消</button>
           <button class="btn-primary" @click="handleCreateDoc">创建</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 加入协作弹窗 -->
+    <div v-if="showJoinModal" class="modal-overlay" @click="showJoinModal = false">
+      <div class="modal-content" @click.stop>
+        <h3>加入协作</h3>
+        <div class="form-item">
+          <label>邀请码</label>
+          <input v-model="inviteCode" placeholder="请输入8位邀请码" @keyup.enter="handleJoinDoc" autofocus>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" @click="showJoinModal = false">取消</button>
+          <button class="btn-primary" @click="handleJoinDoc">加入</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分享弹窗 -->
+    <div v-if="showShareModal" class="modal-overlay" @click="showShareModal = false">
+      <div class="modal-content" @click.stop>
+        <h3>邀请协作</h3>
+        <p style="color: #5f6368; margin-bottom: 10px;">将此邀请码发送给好友，对方即可加入协作：</p>
+        <div class="invite-code-box" style="background: #f1f3f4; padding: 15px; border-radius: 4px; text-align: center; font-size: 24px; letter-spacing: 2px; font-family: monospace; margin-bottom: 20px; user-select: all;">
+          {{ currentInviteCode }}
+        </div>
+        <div class="modal-actions">
+          <button class="btn-primary" @click="showShareModal = false">关闭</button>
         </div>
       </div>
     </div>

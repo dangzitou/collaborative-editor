@@ -32,4 +32,9 @@ public interface DocumentMapper {
      */
     @Select("select * from document where owner_id = #{ownerId} and status = 1 order by update_time desc")
     java.util.List<Document> listByOwnerId(Long ownerId);
+
+    /**
+     * 根据ID列表查询文档
+     */
+    java.util.List<Document> listByIds(java.util.List<String> docIds);
 }

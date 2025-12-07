@@ -58,4 +58,23 @@ public class DocumentController {
         documentService.deleteDocument(docId);
         return Result.success();
     }
+
+    /**
+     * 生成邀请码
+     */
+    @PostMapping("/{docId}/invite")
+    public Result<String> createInviteCode(@PathVariable String docId) {
+        log.info("生成邀请码: {}", docId);
+        return Result.success(documentService.createInviteCode(docId));
+    }
+
+    /**
+     * 加入协作
+     */
+    @PostMapping("/join")
+    public Result<Document> joinByInviteCode(@RequestBody java.util.Map<String, String> body) {
+        String code = body.get("code");
+        log.info("加入协作: {}", code);
+        return Result.success(documentService.joinByInviteCode(code));
+    }
 }
