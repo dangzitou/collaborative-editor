@@ -107,7 +107,23 @@ collaborative-editor/
 
 ### 1. MySQL 配置
 
-#### 1.1 启动 MySQL
+#### 1.1 启动 MySQL 服务
+
+**注意：在连接数据库之前，必须确保 MySQL 服务已启动！**
+
+- **Windows**:
+  1. 按 `Win + R`，输入 `services.msc` 打开服务管理器。
+  2. 找到 `MySQL` 服务（名称可能是 `MySQL80` 或 `MySQL`），右键点击“启动”。
+  3. 或者以管理员身份打开 CMD/PowerShell，运行：`net start mysql`。
+
+- **Linux/Mac**:
+  ```bash
+  sudo service mysql start
+  # 或
+  sudo systemctl start mysql
+  ```
+
+#### 1.2 连接并初始化
 
 在 VS Code 终端（PowerShell）中输入：
 
@@ -133,8 +149,23 @@ source server/src/main/resources/sql/init.sql
 
 本项目使用 Redis 作为实时文档内容的缓冲区（Write-Behind 模式），以提高写入性能。
 
-#### 2.1 安装与启动
-请确保本地或服务器已安装 Redis 并启动服务。默认端口为 `6379`。
+#### 2.1 启动 Redis 服务
+
+**注意：项目运行必须依赖 Redis，请务必先启动 Redis 服务！**
+
+- **Windows**:
+  1. 进入 Redis 安装目录。
+  2. 双击 `redis-server.exe` 启动服务端（会出现一个黑窗口，**不要关闭**）。
+  3. 或者在终端运行：`redis-server`。
+
+- **Linux/Mac**:
+  ```bash
+  redis-server
+  # 或后台启动
+  redis-server --daemonize yes
+  ```
+
+默认端口为 `6379`。
 
 #### 2.2 配置连接
 在 `server/src/main/resources/application-dev.properties` (开发环境) 或 `application-prod.properties` (生产环境) 中配置：
@@ -188,10 +219,18 @@ cd collaborative-editor
 
 ### 3. 启动后端
 
+确保你已安装 Maven 并配置了环境变量。
+
 ```bash
 cd server
-./mvnw spring-boot:run
+mvn spring-boot:run
 ```
+
+> **注意**：
+> - 如果你希望使用项目自带的 Maven Wrapper：
+>   - **Windows (PowerShell)**: `.\mvnw spring-boot:run` (注意是反斜杠 `\` 且前面有 `.\`)
+>   - **Linux/Mac**: `./mvnw spring-boot:run`
+> - 如果报错 `CommandNotFound`，请检查是否已安装 Maven 或目录下是否存在 `mvnw` 文件。
 
 后端服务将在 http://localhost:8080 启动。
 
