@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useWebSocket } from './composables/useWebSocket'
 import { useAuth } from './composables/useAuth'
 import AuthModal from './components/AuthModal.vue'
@@ -24,7 +24,29 @@ const docId = ref('doc-001')
 const serverUrl = ref('ws://localhost:8080/editor/')
 const content = ref('')
 const isEditingTitle = ref(false)
-const showDebugPanel = ref(false)
+
+// 监听登录状态，自动加载文档
+watch(isLoggedIn, async (newVal) => {
+  if (newVal) {
+    // 如果已有 docId，尝试连接
+    if (docId.value && docId.value !== 'doc-001') {
+      handleConnect()
+    } else {
+      // 否则加载最近的文档
+      try {
+        const res = await fetch('http://localhost:8080/api/doc/list', {
+          headers: { 'Authorization': 'Bearer ' + token.value }
+        })
+        const data = await res.json()
+        if (data.code === 200 && data.data && data.data.length > 0) {
+          openDoc(data.data[0])
+        }
+      } catch (e) {
+        console.error(e)
+      }
+    }
+  }
+})
 
 // 当前用户名（登录后使用真实用户名）
 const currentUsername = computed(() => {
@@ -64,7 +86,6 @@ function handleInput() {
 }
 
 // 监听消息
-import { watch } from 'vue'
 watch(() => messages.value, (newMessages) => {
   if (newMessages.length === 0) return
   const lastMsg = newMessages[newMessages.length - 1]
@@ -74,7 +95,7 @@ watch(() => messages.value, (newMessages) => {
       isReceiving = true
       content.value = data.data || ''
       // 添加协作者
-      if (data.sender && !onlineUsers.value.find(u => u.name === data.sender)) {
+      if (data.sender && data.sender !== 'server' && !onlineUsers.value.find(u => u.name === data.sender)) {
         const colors = ['#ea4335', '#34a853', '#fbbc04', '#9c27b0', '#ff5722']
         onlineUsers.value.push({
           name: data.sender,
@@ -103,9 +124,18 @@ const inviteCode = ref('')
 const showShareModal = ref(false)
 const currentInviteCode = ref('')
 
+// 通用消息弹窗
+const showMessageModal = ref(false)
+const messageContent = ref('')
+
+function showMessage(msg) {
+  messageContent.value = msg
+  showMessageModal.value = true
+}
+
 async function openCreateModal() {
   if (!isLoggedIn.value) {
-    alert('请先登录')
+    showMessage('请先登录')
     showAuthModal.value = true
     return
   }
@@ -142,17 +172,17 @@ async function handleCreateDoc() {
       
       showCreateModal.value = false
     } else {
-      alert(data.message || '创建失败')
+      showMessage(data.message || '创建失败')
     }
   } catch (e) {
     console.error(e)
-    alert('创建失败')
+    showMessage('创建失败')
   }
 }
 
 async function fetchDocList() {
   if (!isLoggedIn.value) {
-    alert('请先登录')
+    showMessage('请先登录')
     showAuthModal.value = true
     return
   }
@@ -165,11 +195,11 @@ async function fetchDocList() {
       docList.value = data.data
       showListModal.value = true
     } else {
-      alert(data.message)
+      showMessage(data.message)
     }
   } catch (e) {
     console.error(e)
-    alert('获取列表失败')
+    showMessage('获取列表失败')
   }
 }
 
@@ -195,11 +225,11 @@ async function handleJoinDoc() {
       showJoinModal.value = false
       inviteCode.value = ''
     } else {
-      alert(data.message || '加入失败')
+      showMessage(data.message || '加入失败')
     }
   } catch (e) {
     console.error(e)
-    alert('加入失败')
+    showMessage('加入失败')
   }
 }
 
@@ -215,11 +245,11 @@ async function handleShare() {
       currentInviteCode.value = data.data
       showShareModal.value = true
     } else {
-      alert(data.message || '生成邀请码失败')
+      showMessage(data.message || '生成邀请码失败')
     }
   } catch (e) {
     console.error(e)
-    alert('生成邀请码失败')
+    showMessage('生成邀请码失败')
   }
 }
 
@@ -246,11 +276,11 @@ async function confirmDelete() {
       showDeleteModal.value = false
       docToDelete.value = null
     } else {
-      alert(data.message || '删除失败')
+      showMessage(data.message || '删除失败')
     }
   } catch (e) {
     console.error(e)
-    alert('删除失败')
+    showMessage('删除失败')
   }
 }
 
@@ -288,10 +318,21 @@ onMounted(async () => {
     } catch(e) {
         console.error(e)
     }
-  }
-  // Connect if we have a docId
-  if (docId.value) {
-      handleConnect()
+    // Connect if we have a docId
+    handleConnect()
+  } else if (isLoggedIn.value) {
+    // Auto load latest doc
+    try {
+      const res = await fetch('http://localhost:8080/api/doc/list', {
+        headers: { 'Authorization': 'Bearer ' + token.value }
+      })
+      const data = await res.json()
+      if (data.code === 200 && data.data && data.data.length > 0) {
+        openDoc(data.data[0])
+      }
+    } catch (e) {
+      console.error(e)
+    }
   }
 })
 </script>
@@ -351,13 +392,6 @@ onMounted(async () => {
             +{{ onlineUsers.length - 5 }}
           </div>
         </div>
-
-        <!-- 调试按钮 -->
-        <button class="btn-icon" @click="showDebugPanel = !showDebugPanel" title="调试面板">
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 6c1.4 0 2.8 1.1 2.8 2.5V11c.6.3 1 .8 1 1.5v3c0 .8-.7 1.5-1.5 1.5h-4.5c-.8 0-1.5-.7-1.5-1.5v-3c0-.7.4-1.2 1-1.5V9.5C9.2 8.1 10.6 7 12 7zm0 1.2c-.8 0-1.5.5-1.5 1.3v1.5h3V9.5c0-.8-.7-1.3-1.5-1.3z"/>
-          </svg>
-        </button>
 
         <!-- 登录/用户信息 -->
         <div v-if="!isLoggedIn" class="auth-buttons">
@@ -419,61 +453,13 @@ onMounted(async () => {
 
     <!-- 主体 -->
     <main class="main-content">
-      <!-- 调试面板 -->
-      <aside class="debug-panel" :class="{ visible: showDebugPanel }">
-        <div class="debug-section">
-          <h3>连接设置</h3>
-          <div class="form-item">
-            <label>服务器</label>
-            <input v-model="serverUrl" :disabled="isConnected">
-          </div>
-          <div class="form-item">
-            <label>文档ID</label>
-            <input v-model="docId" :disabled="isConnected">
-          </div>
-          <div class="form-item">
-            <label>当前用户</label>
-            <input :value="currentUsername" disabled>
-          </div>
-          <button
-            v-if="!isConnected"
-            class="btn-primary"
-            @click="handleConnect"
-          >
-            连接
-          </button>
-          <button
-            v-else
-            class="btn-danger"
-            @click="handleDisconnect"
-          >
-            断开
-          </button>
-        </div>
-
-        <div class="debug-section">
-          <h3>消息日志 <span class="badge">{{ messages.length }}</span></h3>
-          <div class="log-list">
-            <div
-              v-for="(msg, i) in messages.slice(-20).reverse()"
-              :key="i"
-              class="log-item"
-              :class="msg.type"
-            >
-              <span class="log-type">{{ msg.type === 'sent' ? '发' : msg.type === 'received' ? '收' : '系' }}</span>
-              <span class="log-content">{{ msg.content.substring(0, 50) }}{{ msg.content.length > 50 ? '...' : '' }}</span>
-            </div>
-          </div>
-        </div>
-      </aside>
-
       <!-- 编辑区域 -->
       <div class="editor-container">
         <div class="paper">
           <textarea
             v-model="content"
             class="editor"
-            :placeholder="isConnected ? '开始输入内容...' : '请先在右侧调试面板连接服务器'"
+            :placeholder="isConnected ? '开始输入内容...' : '请先登录或选择文档'"
             :disabled="!isConnected"
             @input="handleInput"
           ></textarea>
@@ -562,6 +548,17 @@ onMounted(async () => {
         <div class="modal-actions">
           <button class="btn-secondary" @click="showDeleteModal = false">取消</button>
           <button class="btn-danger" @click="confirmDelete">删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 消息提示弹窗 -->
+    <div v-if="showMessageModal" class="modal-overlay" @click="showMessageModal = false">
+      <div class="modal-content" @click.stop style="max-width: 400px;">
+        <h3>提示</h3>
+        <p style="margin: 20px 0; color: #5f6368;">{{ messageContent }}</p>
+        <div class="modal-actions">
+          <button class="btn-primary" @click="showMessageModal = false">确定</button>
         </div>
       </div>
     </div>
