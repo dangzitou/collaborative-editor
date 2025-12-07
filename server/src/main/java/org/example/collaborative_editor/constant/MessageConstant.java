@@ -29,6 +29,7 @@ public class MessageConstant {
     public static final String DOCUMENT_NO_PERMISSION = "无权限操作此文档";
 
     // ========== 协作相关 ==========
+    public static final String INVITE_CODE_INVALID = "邀请码无效或已过期";
     public static final String COLLABORATOR_EXIST = "该用户已是协作者";
     public static final String COLLABORATOR_NOT_FOUND = "协作者不存在";
     public static final String COLLABORATOR_ADD_SUCCESS = "添加协作者成功";
@@ -45,4 +46,3 @@ public class MessageConstant {
         // 私有构造方法，防止实例化
     }
 }
-

@@ -134,7 +134,7 @@ public class DocumentServiceImpl implements DocumentService {
         // 验证邀请码
         String docId = (String) redisTemplate.opsForValue().get("invite:" + code);
         if (docId == null) {
-            throw new BusinessException("邀请码无效或已过期");
+            throw new BusinessException(MessageConstant.INVITE_CODE_INVALID);
         }
 
         // 检查文档
