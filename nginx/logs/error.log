@@ -13,3 +13,5 @@
 2025/12/06 22:35:03 [notice] 26712#11608: signal process started
 2025/12/06 22:35:38 [notice] 20808#6488: signal process started
 2025/12/06 22:35:38 [error] 20808#6488: CreateFile() "E:\Develop\projects\collaborative-editor\nginx/logs/nginx.pid" failed (2: The system cannot find the file specified)
+2025/12/09 12:58:34 [notice] 22360#14144: signal process started
+2025/12/09 13:01:40 [notice] 4580#17616: signal process started

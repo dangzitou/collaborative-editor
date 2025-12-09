@@ -36,7 +36,7 @@ watch(isLoggedIn, async (newVal) => {
     } else {
       // 否则加载最近的文档
       try {
-        const res = await fetch('http://localhost:8080/api/doc/list', {
+        const res = await fetch('/api/doc/list', {
           headers: { 'Authorization': 'Bearer ' + token.value }
         })
         const data = await res.json()
