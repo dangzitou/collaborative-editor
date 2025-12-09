@@ -213,11 +213,40 @@ spring.datasource.password=1234
 
 ### 数据库表结构
 
-| 表名 | 说明 |
-|------|------|
-| user | 用户表（用户名、密码、昵称、邮箱等） |
-| document | 文档表（文档ID、标题、内容、所有者等） |
-| document_collaborator | 文档协作者表（文档ID、用户ID、权限） |
+#### 1. 用户表 (`user`)
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | BIGINT | 主键 |
+| username | VARCHAR(50) | 用户名 (唯一) |
+| password | VARCHAR(255) | 密码 (加密) |
+| nickname | VARCHAR(50) | 昵称 |
+| email | VARCHAR(100) | 邮箱 (唯一) |
+| avatar | VARCHAR(255) | 头像URL |
+| status | TINYINT | 状态: 0-禁用, 1-正常 |
+| created_at | DATETIME | 创建时间 |
+| updated_at | DATETIME | 更新时间 |
+
+#### 2. 文档表 (`document`)
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | BIGINT | 主键 |
+| doc_id | VARCHAR(64) | 文档唯一标识 (唯一) |
+| title | VARCHAR(255) | 文档标题 |
+| content | LONGTEXT | 文档内容 |
+| owner_id | BIGINT | 创建者ID |
+| status | TINYINT | 状态: 0-删除, 1-正常 |
+| create_time | DATETIME | 创建时间 |
+| update_time | DATETIME | 更新时间 |
+| create_user | BIGINT | 创建人 |
+| update_user | BIGINT | 修改人 |
+
+#### 3. 协作者表 (`collaborator`)
+| 字段名 | 类型 | 说明 |
+|--------|------|------|
+| id | BIGINT | 主键 |
+| doc_id | VARCHAR(64) | 文档标识 |
+| user_id | BIGINT | 用户ID |
+| create_time | DATETIME | 创建时间 |
 
 ---
 

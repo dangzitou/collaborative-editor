@@ -49,17 +49,16 @@ CREATE TABLE `document` (
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '文档表';
 
 -- ===========================
--- 文档协作者表
+-- 协作者表
 -- ===========================
-DROP TABLE IF EXISTS `document_collaborator`;
+DROP TABLE IF EXISTS `collaborator`;
 
-CREATE TABLE `document_collaborator` (
+CREATE TABLE `collaborator` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT 'ID',
     `doc_id` VARCHAR(64) NOT NULL COMMENT '文档标识',
     `user_id` BIGINT NOT NULL COMMENT '用户ID',
-    `permission` TINYINT NOT NULL DEFAULT 1 COMMENT '权限: 1-只读, 2-编辑, 3-管理',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_doc_user` (`doc_id`, `user_id`),
     KEY `idx_user_id` (`user_id`)
-) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '文档协作者表';
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '协作者表';
