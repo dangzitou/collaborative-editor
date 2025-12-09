@@ -21,7 +21,9 @@ const showUserMenu = ref(false)
 // 文档信息
 const docTitle = ref('未命名文档')
 const docId = ref('doc-001')
-const serverUrl = ref('ws://localhost:8080/editor/')
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+const host = window.location.host
+const serverUrl = ref(`${protocol}//${host}/editor/`)
 const content = ref('')
 const isEditingTitle = ref(false)
 

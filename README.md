@@ -741,6 +741,42 @@ git push origin feature/your-feature
 
 ---
 
+## 常见问题 (FAQ)
+
+### 1. 内网穿透后访问显示 403 Forbidden
+
+**现象**：启动 Nginx 后，将 `localhost:8080` 穿透到公网，其他设备访问显示 403。
+
+**原因**：
+- Nginx 监听 **80** 端口，负责提供前端页面和反向代理。
+- 后端 (Spring Boot) 监听 **8080** 端口，只处理 API。
+- 如果直接穿透 8080 端口，请求会绕过 Nginx 直接到达后端。后端没有配置静态页面，且可能有安全策略限制，导致 403 或 404。
+
+**解决方法**：
+- 修改内网穿透配置，将本地端口改为 **80**。
+- 例如使用 cpolar/ngrok/frp 时，映射 `http 80`。
+
+### 2. Windows 终端控制台中文乱码
+
+**现象**：在 Windows PowerShell 中运行后端时，日志中的中文显示为乱码。
+
+**解决方法**：
+
+**方法一：强制 JVM 输出 GBK（推荐）**
+顺应 Windows 默认的 GBK 编码，强制 Java 程序输出 GBK 日志。注意 PowerShell 中参数需要引号包裹：
+```powershell
+mvn spring-boot:run '-Dspring-boot.run.jvmArguments=-Dfile.encoding=GBK'
+```
+
+**方法二：修改终端编码**
+先切换终端页码为 UTF-8，再运行：
+```powershell
+chcp 65001
+mvn spring-boot:run
+```
+
+---
+
 ## License
 
 MIT

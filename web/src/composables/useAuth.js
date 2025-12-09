@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 
-const API_BASE = 'http://localhost:8080/api'
+const API_BASE = '/api'
 
 // 用户状态（全局单例）
 const user = ref(null)
