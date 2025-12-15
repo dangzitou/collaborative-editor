@@ -173,7 +173,7 @@ async function handleCreateDoc() {
   if (!newDocTitle.value) return
 
   try {
-    const res = await fetch('http://localhost:8080/api/doc', {
+    const res = await fetch('/api/doc', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -213,7 +213,7 @@ async function fetchDocList() {
     return
   }
   try {
-    const res = await fetch('http://localhost:8080/api/doc/list', {
+    const res = await fetch('/api/doc/list', {
       headers: { 'Authorization': 'Bearer ' + token.value }
     })
     const data = await res.json()
@@ -237,7 +237,7 @@ function deleteDoc(doc) {
 async function handleJoinDoc() {
   if (!inviteCode.value) return
   try {
-    const res = await fetch('http://localhost:8080/api/doc/join', {
+    const res = await fetch('/api/doc/join', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -262,7 +262,7 @@ async function handleJoinDoc() {
 async function handleShare() {
   if (!docId.value) return
   try {
-    const res = await fetch(`http://localhost:8080/api/doc/${docId.value}/invite`, {
+    const res = await fetch(`/api/doc/${docId.value}/invite`, {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + token.value }
     })
@@ -284,7 +284,7 @@ async function confirmDelete() {
   
   const doc = docToDelete.value
   try {
-    const res = await fetch(`http://localhost:8080/api/doc/${doc.docId}`, {
+    const res = await fetch(`/api/doc/${doc.docId}`, {
       method: 'DELETE',
       headers: { 'Authorization': 'Bearer ' + token.value }
     })
@@ -333,7 +333,7 @@ onMounted(async () => {
     docId.value = id
     // Fetch doc info
     try {
-        const res = await fetch(`http://localhost:8080/api/doc/${id}`, {
+        const res = await fetch(`/api/doc/${id}`, {
              headers: { 'Authorization': 'Bearer ' + token.value }
         })
         const data = await res.json()
@@ -349,7 +349,7 @@ onMounted(async () => {
   } else if (isLoggedIn.value) {
     // Auto load latest doc
     try {
-      const res = await fetch('http://localhost:8080/api/doc/list', {
+      const res = await fetch('/api/doc/list', {
         headers: { 'Authorization': 'Bearer ' + token.value }
       })
       const data = await res.json()
