@@ -109,6 +109,14 @@ collaborative-editor/
    - 在 `Path` 变量中添加 `%MAVEN_HOME%\bin`。
 4. **验证**: 打开新的 CMD/PowerShell，输入 `mvn -v`，显示版本号即成功。
 
+### Node.js 安装说明
+
+如果你的电脑未安装 Node.js（运行 `node -v` 报错），请按照以下步骤安装：
+
+1. **下载**: 访问 [Node.js 官网](https://nodejs.org/) 下载 LTS 版本（长期支持版）。
+2. **安装**: 运行安装程序，一路点击 "Next" 即可。
+3. **验证**: 打开新的 CMD/PowerShell，输入 `node -v` 和 `npm -v`，显示版本号即成功。
+
 ### 可选
 
 | 工具 | 说明 |
@@ -281,6 +289,8 @@ mvn spring-boot:run
 后端服务将在 http://localhost:8080 启动。
 
 ### 4. 启动前端（开发模式）
+
+确保你已安装 Node.js 环境。
 
 ```bash
 cd web
