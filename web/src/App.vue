@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useWebSocket } from './composables/useWebSocket'
 import { useAuth } from './composables/useAuth'
 import AuthModal from './components/AuthModal.vue'
@@ -58,6 +58,76 @@ const currentUsername = computed(() => {
 // 模拟在线用户
 const onlineUsers = ref([])
 
+// 远程光标
+const remoteCursors = ref({})
+const textareaRef = ref(null)
+
+// 计算光标坐标的辅助函数
+function getCaretCoordinates(element, position) {
+  const div = document.createElement('div')
+  const style = window.getComputedStyle(element)
+  const properties = [
+    'direction', 'boxSizing', 'width', 'height', 'overflowX', 'overflowY',
+    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderStyle',
+    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize', 'fontSizeAdjust', 'lineHeight', 'fontFamily',
+    'textAlign', 'textTransform', 'textIndent', 'textDecoration', 'letterSpacing', 'wordSpacing',
+    'tabSize', 'MozTabSize'
+  ]
+
+  properties.forEach(prop => {
+    div.style[prop] = style.getPropertyValue(prop)
+  })
+
+  div.style.position = 'absolute'
+  div.style.top = '0'
+  div.style.left = '-9999px'
+  div.style.visibility = 'hidden'
+  div.style.whiteSpace = 'pre-wrap'
+  div.textContent = element.value.substring(0, position)
+
+  const span = document.createElement('span')
+  span.textContent = element.value.substring(position) || '.'
+  div.appendChild(span)
+
+  document.body.appendChild(div)
+  
+  const coordinates = {
+    top: span.offsetTop + parseInt(style['borderTopWidth']),
+    left: span.offsetLeft + parseInt(style['borderLeftWidth']),
+    height: parseInt(style['lineHeight']) || 20 // fallback
+  }
+
+  document.body.removeChild(div)
+  return coordinates
+}
+
+function updateCursorPosition(username) {
+  nextTick(() => {
+    const textarea = textareaRef.value
+    if (!textarea) return
+    
+    const cursor = remoteCursors.value[username]
+    if (!cursor) return
+    
+    const { top, left, height } = getCaretCoordinates(textarea, cursor.index)
+    cursor.top = top - textarea.scrollTop
+    cursor.left = left - textarea.scrollLeft
+    cursor.height = height
+  })
+}
+
+function handleScroll() {
+  Object.keys(remoteCursors.value).forEach(username => updateCursorPosition(username))
+}
+
+// 监听内容变化，更新所有光标位置
+watch(content, () => {
+  nextTick(() => {
+    Object.keys(remoteCursors.value).forEach(updateCursorPosition)
+  })
+})
+
 // 连接处理
 function handleConnect() {
   const wsUrl = serverUrl.value + docId.value + '?token=' + token.value + '&username=' + encodeURIComponent(currentUsername.value)
@@ -87,6 +157,54 @@ function handleInput() {
   }
 }
 
+function handleCursorMove(e) {
+  if (!isConnected.value) return
+  const textarea = e.target
+  const index = textarea.selectionStart
+  sendJson('CURSOR', currentUsername.value, index.toString())
+}
+
+// 辅助函数：更新内容并保持光标相对位置
+function updateContentPreservingCursor(newContent) {
+  const textarea = textareaRef.value
+  if (!textarea) {
+    content.value = newContent
+    return
+  }
+
+  const oldContent = content.value
+  const currentPos = textarea.selectionStart
+  const currentEnd = textarea.selectionEnd
+
+  // 1. 找到第一个不同的字符位置
+  let start = 0
+  while (
+    start < oldContent.length &&
+    start < newContent.length &&
+    oldContent[start] === newContent[start]
+  ) {
+    start++
+  }
+
+  // 2. 计算长度变化
+  const lengthDiff = newContent.length - oldContent.length
+
+  // 3. 更新数据
+  content.value = newContent
+
+  // 4. 调整光标
+  if (currentPos > start) {
+    const newPos = Math.max(start, currentPos + lengthDiff)
+    nextTick(() => {
+      textarea.setSelectionRange(newPos, newPos)
+    })
+  } else {
+    nextTick(() => {
+      textarea.setSelectionRange(currentPos, currentEnd)
+    })
+  }
+}
+
 // 监听消息
 watch(() => messages.value, (newMessages) => {
   if (newMessages.length === 0) return
@@ -99,7 +217,11 @@ watch(() => messages.value, (newMessages) => {
 
     if (data.type === 'SYNC' || data.type === 'EDIT') {
       isReceiving = true
-      content.value = data.data || ''
+      if (data.type === 'EDIT') {
+        updateContentPreservingCursor(data.data || '')
+      } else {
+        content.value = data.data || ''
+      }
       // 添加协作者 (兼容旧逻辑，防止 USER_LIST 失败)
       if (data.sender && data.sender !== 'server' && !onlineUsers.value.find(u => u.name === data.sender)) {
         onlineUsers.value.push({
@@ -117,6 +239,23 @@ watch(() => messages.value, (newMessages) => {
       }
     } else if (data.type === 'USER_LEAVE') {
       onlineUsers.value = onlineUsers.value.filter(u => u.name !== data.sender)
+      delete remoteCursors.value[data.sender]
+    } else if (data.type === 'CURSOR') {
+      if (data.sender && data.sender !== currentUsername.value) {
+        let user = onlineUsers.value.find(u => u.name === data.sender)
+        if (!user) {
+          user = { name: data.sender, color: colors[onlineUsers.value.length % colors.length] }
+          onlineUsers.value.push(user)
+        }
+        
+        const cursor = remoteCursors.value[data.sender] || {}
+        cursor.index = parseInt(data.data)
+        cursor.color = user.color
+        cursor.name = data.sender
+        remoteCursors.value[data.sender] = cursor
+        
+        updateCursorPosition(data.sender)
+      }
     } else if (data.type === 'USER_LIST') {
       try {
         const users = JSON.parse(data.data)
@@ -481,14 +620,36 @@ onMounted(async () => {
     <main class="main-content">
       <!-- 编辑区域 -->
       <div class="editor-container">
-        <div class="paper">
+        <div class="paper" style="position: relative;">
           <textarea
+            ref="textareaRef"
             v-model="content"
             class="editor"
             :placeholder="isConnected ? '开始输入内容...' : '请先登录或选择文档'"
             :disabled="!isConnected"
             @input="handleInput"
+            @keyup="handleCursorMove"
+            @click="handleCursorMove"
+            @select="handleCursorMove"
+            @scroll="handleScroll"
           ></textarea>
+
+          <!-- 远程光标 -->
+          <div
+            v-for="(cursor, username) in remoteCursors"
+            :key="username"
+            class="remote-cursor"
+            :style="{
+              top: cursor.top + 'px',
+              left: cursor.left + 'px',
+              height: cursor.height + 'px',
+              backgroundColor: cursor.color
+            }"
+          >
+            <div class="cursor-flag" :style="{ backgroundColor: cursor.color }">
+              {{ getInitial(cursor.name) }}
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -1256,5 +1417,28 @@ onMounted(async () => {
     z-index: 100;
     box-shadow: -2px 0 8px rgba(0,0,0,0.15);
   }
+}
+
+.remote-cursor {
+  position: absolute;
+  width: 2px;
+  pointer-events: none;
+  z-index: 10;
+  transition: all 0.1s ease;
+}
+
+.cursor-flag {
+  position: absolute;
+  top: -24px;
+  left: -9px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: white;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 </style>

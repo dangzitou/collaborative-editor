@@ -240,6 +240,11 @@ public class EditorServer {
 
                 // 广播给同文档下的其他人（排除发送者自己）
                 broadcast(messageStr, session);
+            } else if (WsMessageType.CURSOR.equals(msg.getType())) {
+                // 广播光标位置
+                String username = (String) session.getUserProperties().get("username");
+                msg.setSender(username);
+                broadcast(objectMapper.writeValueAsString(msg), session);
             }
         } catch (IOException e) {
             log.error("解析消息失败: {}", messageStr, e);
