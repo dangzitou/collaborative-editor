@@ -15,3 +15,5 @@
 2025/12/06 22:35:38 [error] 20808#6488: CreateFile() "E:\Develop\projects\collaborative-editor\nginx/logs/nginx.pid" failed (2: The system cannot find the file specified)
 2025/12/09 12:58:34 [notice] 22360#14144: signal process started
 2025/12/09 13:01:40 [notice] 4580#17616: signal process started
+2025/12/16 15:13:35 [emerg] 9348#20444: CreateDirectory() "C:\Users\刘亦锋\Desktop\协同\collaborative-editor\nginx/temp/client_body_temp" failed (3: The system cannot find the path specified)
+2025/12/16 15:14:22 [emerg] 13068#24316: CreateDirectory() "C:\Users\刘亦锋\Desktop\协同\collaborative-editor\nginx/temp/client_body_temp" failed (3: The system cannot find the path specified)
