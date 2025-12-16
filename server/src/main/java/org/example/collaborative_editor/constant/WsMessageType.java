@@ -41,6 +41,11 @@ public class WsMessageType {
     public static final String OPERATION = "OPERATION";
 
     /**
+     * 文档删除消息
+     */
+    public static final String DOC_DELETED = "DOC_DELETED";
+
+    /**
      * 系统发送者标识
      */
     public static final String SENDER_SERVER = "server";

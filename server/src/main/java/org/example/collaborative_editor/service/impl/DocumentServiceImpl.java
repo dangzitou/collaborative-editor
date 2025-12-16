@@ -35,12 +35,12 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     public Document createDocument(String title, Long userId) {
         Document document = Document.builder()
-                                    .title(title)
-                                    .docId(UUID.randomUUID().toString())
-                                    .ownerId(userId)
-                                    .status(StatusConstant.ENABLE)
-                                    .content("")
-                                    .build(); // 默认内容为空
+                .title(title)
+                .docId(UUID.randomUUID().toString())
+                .ownerId(userId)
+                .status(StatusConstant.ENABLE)
+                .content("")
+                .build(); // 默认内容为空
         documentMapper.insert(document);
         return document;
     }
@@ -106,6 +106,12 @@ public class DocumentServiceImpl implements DocumentService {
         // 删除Redis缓存
         redisTemplate.delete("doc:" + docId);
         redisTemplate.opsForSet().remove("dirty_docs", docId);
+
+        // 广播删除消息
+        org.example.collaborative_editor.ws.EditorServer.broadcastSystemMessage(
+                docId,
+                org.example.collaborative_editor.constant.WsMessageType.DOC_DELETED,
+                "Document deleted");
     }
 
     @Override

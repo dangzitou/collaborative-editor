@@ -5,6 +5,8 @@ import jakarta.websocket.*;
 import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
 import lombok.extern.slf4j.Slf4j;
+
+import org.example.collaborative_editor.constant.MessageConstant;
 import org.example.collaborative_editor.constant.WsMessageType;
 import org.example.collaborative_editor.context.BaseContext;
 import org.example.collaborative_editor.dto.WsMessage;
@@ -140,6 +142,33 @@ public class EditorServer {
             session.getUserProperties().put("username", username);
         }
 
+        // 从 Redis 获取文档内容
+        String content = (String) redisTemplate.opsForValue().get("doc:" + docId);
+
+        // 如果 Redis 中没有，尝试从数据库加载
+        if (content == null) {
+            try {
+                Document doc = documentService.getDocument(docId);
+                if (doc != null) {
+                    content = doc.getContent();
+                    if (content == null) {
+                        content = "";
+                    }
+                    // 回写到 Redis，设置过期时间（例如24小时）
+                    redisTemplate.opsForValue().set("doc:" + docId, content, 24, TimeUnit.HOURS);
+                }
+            } catch (Exception e) {
+                log.warn("加载文档失败: {}", docId);
+                try {
+                    session.close(
+                            new CloseReason(CloseReason.CloseCodes.CANNOT_ACCEPT, MessageConstant.DOCUMENT_NOT_FOUND));
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                }
+                return;
+            }
+        }
+
         // 将用户加入对应文档的集合
         // computeIfAbsent 保证原子性：如果集合不存在则创建，存在则返回
         docSessions.computeIfAbsent(docId, k -> new CopyOnWriteArraySet<>()).add(session);
@@ -172,26 +201,6 @@ public class EditorServer {
             session.getAsyncRemote().sendText(objectMapper.writeValueAsString(listMsg));
         } catch (IOException e) {
             log.error("发送用户列表失败", e);
-        }
-
-        // 从 Redis 获取文档内容
-        String content = (String) redisTemplate.opsForValue().get("doc:" + docId);
-
-        // 如果 Redis 中没有，尝试从数据库加载
-        if (content == null) {
-            try {
-                Document doc = documentService.getDocument(docId);
-                if (doc != null) {
-                    content = doc.getContent();
-                    if (content == null) {
-                        content = "";
-                    }
-                    // 回写到 Redis，设置过期时间（例如24小时）
-                    redisTemplate.opsForValue().set("doc:" + docId, content, 24, TimeUnit.HOURS);
-                }
-            } catch (Exception e) {
-                log.warn("加载文档失败: {}", docId);
-            }
         }
 
         // 如果该文档已有内容，立即发送一条 type: "SYNC" 的消息给新用户
@@ -326,6 +335,32 @@ public class EditorServer {
                 } catch (IOException e) {
                     log.error("广播消息失败: sessionId={}", s.getId(), e);
                 }
+            }
+        }
+    }
+
+    /**
+     * 静态方法：向指定文档的所有用户广播系统消息
+     */
+    public static void broadcastSystemMessage(String docId, String type, String content) {
+        CopyOnWriteArraySet<Session> sessions = docSessions.get(docId);
+        if (sessions != null) {
+            try {
+                WsMessage msg = new WsMessage();
+                msg.setType(type);
+                msg.setSender(WsMessageType.SENDER_SERVER);
+                msg.setData(content);
+                String json = objectMapper.writeValueAsString(msg);
+
+                for (Session s : sessions) {
+                    if (s.isOpen()) {
+                        synchronized (s) {
+                            s.getBasicRemote().sendText(json);
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                log.error("广播系统消息失败: docId={}", docId, e);
             }
         }
     }

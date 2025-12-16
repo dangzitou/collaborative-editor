@@ -27,8 +27,9 @@ export function useWebSocket() {
   /**
    * 连接 WebSocket
    * @param {string} wsUrl - 完整的 WebSocket URL
+   * @param {object} options - 配置项 { onClose: (event) => {} }
    */
-  function connect(wsUrl) {
+  function connect(wsUrl, options = {}) {
     if (socket.value && socket.value.readyState === WebSocket.OPEN) {
       addMessage('system', '已经连接，请先断开')
       return
@@ -63,6 +64,10 @@ export function useWebSocket() {
         isConnected.value = false
         addMessage('system', `连接关闭 (code: ${event.code}, reason: ${event.reason || '无'})`)
         socket.value = null
+        
+        if (options.onClose) {
+          options.onClose(event)
+        }
       }
 
       socket.value.onerror = () => {

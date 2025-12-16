@@ -178,7 +178,15 @@ watch(content, (newVal, oldVal) => {
 // 连接处理
 function handleConnect() {
   const wsUrl = serverUrl.value + docId.value + '?token=' + token.value + '&username=' + encodeURIComponent(currentUsername.value)
-  connect(wsUrl)
+  connect(wsUrl, {
+    onClose: (event) => {
+      if (event.code === 1003 || event.reason === "Document not found") {
+        showMessage('文档不存在或已被删除', () => {
+          window.location.href = '/'
+        })
+      }
+    }
+  })
   onlineUsers.value = [{ name: currentUsername.value, color: '#1a73e8' }]
 }
 
@@ -315,6 +323,24 @@ watch(() => messages.value, (newMessages) => {
       } catch (e) {
         console.error('解析用户列表失败', e)
       }
+    } else if (data.type === 'DOC_DELETED') {
+        showMessage('当前文档已被删除', async () => {
+            // 尝试获取最新文档列表并跳转到第一个
+            try {
+                const res = await fetch('/api/doc/list', {
+                    headers: { 'Authorization': 'Bearer ' + token.value }
+                })
+                const resData = await res.json()
+                if (resData.code === 200 && resData.data && resData.data.length > 0) {
+                    openDoc(resData.data[0])
+                } else {
+                    // 如果没有文档了，回到主页（或者清空状态）
+                    window.location.href = '/'
+                }
+            } catch (e) {
+                window.location.href = '/'
+            }
+        })
     }
   }
 }, { deep: true })
@@ -339,10 +365,20 @@ const currentInviteCode = ref('')
 // 通用消息弹窗
 const showMessageModal = ref(false)
 const messageContent = ref('')
+const messageCallback = ref(null)
 
-function showMessage(msg) {
+function showMessage(msg, callback = null) {
   messageContent.value = msg
+  messageCallback.value = callback
   showMessageModal.value = true
+}
+
+function handleMessageConfirm() {
+  showMessageModal.value = false
+  if (messageCallback.value) {
+    messageCallback.value()
+    messageCallback.value = null
+  }
 }
 
 async function openCreateModal() {
@@ -526,12 +562,19 @@ onMounted(async () => {
         if (data.code === 200) {
             docTitle.value = data.data.title
             content.value = data.data.content || ''
+            // Connect if we have a docId
+            handleConnect()
+        } else {
+            showMessage('文档不存在或已被删除', () => {
+                window.location.href = '/'
+            })
         }
     } catch(e) {
         console.error(e)
+        showMessage('加载文档失败', () => {
+            window.location.href = '/'
+        })
     }
-    // Connect if we have a docId
-    handleConnect()
   } else if (isLoggedIn.value) {
     // Auto load latest doc
     try {
@@ -787,12 +830,12 @@ onMounted(async () => {
     </div>
 
     <!-- 消息提示弹窗 -->
-    <div v-if="showMessageModal" class="modal-overlay" @click="showMessageModal = false">
+    <div v-if="showMessageModal" class="modal-overlay" @click="handleMessageConfirm">
       <div class="modal-content" @click.stop style="max-width: 400px;">
         <h3>提示</h3>
         <p style="margin: 20px 0; color: #5f6368;">{{ messageContent }}</p>
         <div class="modal-actions">
-          <button class="btn-primary" @click="showMessageModal = false">确定</button>
+          <button class="btn-primary" @click="handleMessageConfirm">确定</button>
         </div>
       </div>
     </div>

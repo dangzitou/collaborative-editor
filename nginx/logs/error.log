@@ -17,3 +17,6 @@
 2025/12/09 13:01:40 [notice] 4580#17616: signal process started
 2025/12/16 15:13:35 [emerg] 9348#20444: CreateDirectory() "C:\Users\刘亦锋\Desktop\协同\collaborative-editor\nginx/temp/client_body_temp" failed (3: The system cannot find the path specified)
 2025/12/16 15:14:22 [emerg] 13068#24316: CreateDirectory() "C:\Users\刘亦锋\Desktop\协同\collaborative-editor\nginx/temp/client_body_temp" failed (3: The system cannot find the path specified)
+2025/12/16 17:17:36 [notice] 29628#40116: signal process started
+2025/12/16 17:22:34 [notice] 39148#24072: signal process started
+2025/12/16 17:26:07 [notice] 23844#31920: signal process started
