@@ -72,18 +72,32 @@ function getCaretCoordinates(element, position) {
     'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
     'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize', 'fontSizeAdjust', 'lineHeight', 'fontFamily',
     'textAlign', 'textTransform', 'textIndent', 'textDecoration', 'letterSpacing', 'wordSpacing',
-    'tabSize', 'MozTabSize'
+    'tabSize', 'MozTabSize',
+    'wordBreak', 'overflowWrap', 'wordWrap', 'whiteSpace'
   ]
 
   properties.forEach(prop => {
-    div.style[prop] = style.getPropertyValue(prop)
+    div.style[prop] = style[prop]
   })
+
+  // 显式重置关键属性，防止继承导致的布局差异
+  div.style.overflow = 'hidden'
+  div.style.height = 'auto'
+
+  // 修正宽度：确保镜像 div 的内容宽度与 textarea 的可视内容宽度一致（扣除滚动条）
+  // 使用 parseFloat 提高精度，避免累积误差
+  if (style.boxSizing === 'border-box') {
+    div.style.width = (element.clientWidth + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)) + 'px'
+  } else {
+    // content-box
+    div.style.width = (element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)) + 'px'
+  }
 
   div.style.position = 'absolute'
   div.style.top = '0'
   div.style.left = '-9999px'
   div.style.visibility = 'hidden'
-  div.style.whiteSpace = 'pre-wrap'
+  // div.style.whiteSpace = 'pre-wrap' // 已通过 properties 复制
   div.textContent = element.value.substring(0, position)
 
   const span = document.createElement('span')
@@ -122,7 +136,40 @@ function handleScroll() {
 }
 
 // 监听内容变化，更新所有光标位置
-watch(content, () => {
+watch(content, (newVal, oldVal) => {
+  if (oldVal !== undefined && newVal !== oldVal) {
+    // 计算变更差异，自动调整远程光标位置
+    let start = 0
+    while (start < newVal.length && start < oldVal.length && newVal[start] === oldVal[start]) {
+      start++
+    }
+
+    let endNew = newVal.length
+    let endOld = oldVal.length
+    while (endNew > start && endOld > start && newVal[endNew - 1] === oldVal[endOld - 1]) {
+      endNew--
+      endOld--
+    }
+
+    const removedLength = endOld - start
+    const addedLength = endNew - start
+    const delta = addedLength - removedLength
+
+    // 更新所有远程光标索引
+    Object.keys(remoteCursors.value).forEach(username => {
+      const cursor = remoteCursors.value[username]
+      if (cursor.index > start) {
+        if (cursor.index < start + removedLength) {
+          // 光标在被删除的内容中，归位到删除点
+          cursor.index = start
+        } else {
+          // 光标在变化点之后，平移
+          cursor.index += delta
+        }
+      }
+    })
+  }
+
   nextTick(() => {
     Object.keys(remoteCursors.value).forEach(updateCursorPosition)
   })
