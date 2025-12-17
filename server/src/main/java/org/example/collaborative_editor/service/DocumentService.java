@@ -2,6 +2,8 @@ package org.example.collaborative_editor.service;
 
 import org.example.collaborative_editor.entity.Document;
 
+import org.example.collaborative_editor.vo.DocumentVO;
+
 public interface DocumentService {
 
     /**
@@ -22,7 +24,7 @@ public interface DocumentService {
     /**
      * 获取用户文档列表
      */
-    java.util.List<Document> listDocuments(Long userId);
+    java.util.List<DocumentVO> listDocuments(Long userId);
 
     /**
      * 删除文档

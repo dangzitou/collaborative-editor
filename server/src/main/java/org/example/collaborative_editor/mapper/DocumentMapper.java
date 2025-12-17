@@ -6,6 +6,8 @@ import org.example.collaborative_editor.annotation.AutoFill;
 import org.example.collaborative_editor.entity.Document;
 import org.example.collaborative_editor.enumeration.OperationType;
 
+import org.example.collaborative_editor.vo.DocumentVO;
+
 @Mapper
 public interface DocumentMapper {
 
@@ -30,11 +32,10 @@ public interface DocumentMapper {
     /**
      * 查询用户文档列表
      */
-    @Select("select * from document where owner_id = #{ownerId} and status = 1 order by update_time desc")
-    java.util.List<Document> listByOwnerId(Long ownerId);
+    java.util.List<DocumentVO> listByOwnerId(Long ownerId);
 
     /**
      * 根据ID列表查询文档
      */
-    java.util.List<Document> listByIds(java.util.List<String> docIds);
+    java.util.List<DocumentVO> listByIds(java.util.List<String> docIds);
 }

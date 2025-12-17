@@ -803,6 +803,7 @@ onMounted(async () => {
             <div class="doc-item-info">
               <div class="doc-item-title">{{ doc.title }}</div>
               <div class="doc-item-time">更新时间: {{ new Date(doc.updateTime).toLocaleString() }}</div>
+              <div class="doc-item-owner" v-if="doc.ownerName">创建者: {{ doc.ownerName }}</div>
             </div>
             <button class="delete-btn" @click.stop="deleteDoc(doc)" title="删除">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="#5f6368">
@@ -811,7 +812,8 @@ onMounted(async () => {
             </button>
           </div>
         </div>
-        <div class="modal-actions">
+        <div class="modal-actions" style="justify-content: space-between;">
+          <button class="btn-primary" @click="showListModal = false; openCreateModal()">新建文档</button>
           <button class="btn-secondary" @click="showListModal = false">关闭</button>
         </div>
       </div>
@@ -1230,6 +1232,12 @@ onMounted(async () => {
 .doc-item-time {
   font-size: 12px;
   color: #5f6368;
+}
+
+.doc-item-owner {
+  font-size: 12px;
+  color: #5f6368;
+  margin-top: 2px;
 }
 
 .delete-btn {

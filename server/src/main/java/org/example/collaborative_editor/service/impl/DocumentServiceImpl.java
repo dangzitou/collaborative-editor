@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import org.example.collaborative_editor.vo.DocumentVO;
+
 @Service
 @Slf4j
 @RequiredArgsConstructor
@@ -64,19 +66,19 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
-    public java.util.List<Document> listDocuments(Long userId) {
+    public java.util.List<DocumentVO> listDocuments(Long userId) {
         // 1. 获取自己创建的文档
-        List<Document> myDocs = documentMapper.listByOwnerId(userId);
+        List<DocumentVO> myDocs = documentMapper.listByOwnerId(userId);
 
         // 2. 获取参与协作的文档
         List<String> collabDocIds = collaboratorMapper.listDocIdsByUserId(userId);
-        List<Document> collabDocs = new ArrayList<>();
+        List<DocumentVO> collabDocs = new ArrayList<>();
         if (collabDocIds != null && !collabDocIds.isEmpty()) {
             collabDocs = documentMapper.listByIds(collabDocIds);
         }
 
         // 3. 合并列表
-        List<Document> result = new ArrayList<>();
+        List<DocumentVO> result = new ArrayList<>();
         if (myDocs != null)
             result.addAll(myDocs);
         if (collabDocs != null)
