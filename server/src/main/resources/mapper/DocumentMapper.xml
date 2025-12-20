@@ -20,12 +20,23 @@
         where doc_id = #{docId}
     </update>
 
-    <select id="listByIds" resultType="org.example.collaborative_editor.entity.Document">
-        select * from document where status = 1 and doc_id in
+    <select id="listByOwnerId" resultType="org.example.collaborative_editor.vo.DocumentVO">
+        select d.*, u.nickname as ownerName
+        from document d
+        left join user u on d.owner_id = u.id
+        where d.owner_id = #{ownerId} and d.status = 1
+        order by d.update_time desc
+    </select>
+
+    <select id="listByIds" resultType="org.example.collaborative_editor.vo.DocumentVO">
+        select d.*, u.nickname as ownerName
+        from document d
+        left join user u on d.owner_id = u.id
+        where d.status = 1 and d.doc_id in
         <foreach collection="docIds" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>
-        order by update_time desc
+        order by d.update_time desc
     </select>
 
 </mapper>

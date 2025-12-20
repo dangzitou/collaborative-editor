@@ -9,6 +9,8 @@ import org.example.collaborative_editor.entity.Document;
 import org.example.collaborative_editor.service.DocumentService;
 import org.springframework.web.bind.annotation.*;
 
+import org.example.collaborative_editor.vo.DocumentVO;
+
 @RestController
 @RequestMapping("/api/doc")
 @RequiredArgsConstructor
@@ -43,7 +45,7 @@ public class DocumentController {
      * 获取文档列表
      */
     @GetMapping("/list")
-    public Result<java.util.List<Document>> listDocuments() {
+    public Result<java.util.List<DocumentVO>> listDocuments() {
         Long userId = BaseContext.getCurrentId();
         log.info("获取文档列表, userId: {}", userId);
         return Result.success(documentService.listDocuments(userId));
