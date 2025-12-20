@@ -60,118 +60,134 @@ const onlineUsers = ref([])
 
 // 远程光标
 const remoteCursors = ref({})
-const textareaRef = ref(null)
+const editorRef = ref(null)
+const foreColorInput = ref(null)
+const hiliteColorInput = ref(null)
 
-// 计算光标坐标的辅助函数
-function getCaretCoordinates(element, position) {
-  const div = document.createElement('div')
-  const style = window.getComputedStyle(element)
-  const properties = [
-    'direction', 'boxSizing', 'width', 'height', 'overflowX', 'overflowY',
-    'borderTopWidth', 'borderRightWidth', 'borderBottomWidth', 'borderLeftWidth', 'borderStyle',
-    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-    'fontStyle', 'fontVariant', 'fontWeight', 'fontStretch', 'fontSize', 'fontSizeAdjust', 'lineHeight', 'fontFamily',
-    'textAlign', 'textTransform', 'textIndent', 'textDecoration', 'letterSpacing', 'wordSpacing',
-    'tabSize', 'MozTabSize',
-    'wordBreak', 'overflowWrap', 'wordWrap', 'whiteSpace'
-  ]
+// 当前样式状态
+const currentStyle = ref({
+  bold: false,
+  italic: false,
+  underline: false,
+  strikeThrough: false,
+  justifyLeft: false,
+  justifyCenter: false,
+  justifyRight: false,
+  fontName: 'Arial',
+  fontSize: '3',
+  foreColor: '#000000',
+  hiliteColor: 'transparent'
+})
 
-  properties.forEach(prop => {
-    div.style[prop] = style[prop]
-  })
-
-  // 显式重置关键属性，防止继承导致的布局差异
-  div.style.overflow = 'hidden'
-  div.style.height = 'auto'
-
-  // 修正宽度：确保镜像 div 的内容宽度与 textarea 的可视内容宽度一致（扣除滚动条）
-  // 使用 parseFloat 提高精度，避免累积误差
-  if (style.boxSizing === 'border-box') {
-    div.style.width = (element.clientWidth + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth)) + 'px'
-  } else {
-    // content-box
-    div.style.width = (element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)) + 'px'
-  }
-
-  div.style.position = 'absolute'
-  div.style.top = '0'
-  div.style.left = '-9999px'
-  div.style.visibility = 'hidden'
-  // div.style.whiteSpace = 'pre-wrap' // 已通过 properties 复制
-  div.textContent = element.value.substring(0, position)
-
-  const span = document.createElement('span')
-  span.textContent = element.value.substring(position) || '.'
-  div.appendChild(span)
-
-  document.body.appendChild(div)
+// 辅助函数：RGB转Hex
+function rgbToHex(rgb) {
+  if (!rgb || rgb === 'transparent' || rgb === 'rgba(0, 0, 0, 0)') return ''
+  if (rgb.startsWith('#')) return rgb
   
-  const coordinates = {
-    top: span.offsetTop + parseInt(style['borderTopWidth']),
-    left: span.offsetLeft + parseInt(style['borderLeftWidth']),
-    height: parseInt(style['lineHeight']) || 20 // fallback
+  const sep = rgb.indexOf(",") > -1 ? "," : " ";
+  const parts = rgb.substr(4).split(")")[0].split(sep);
+  
+  let r = (+parts[0]).toString(16),
+      g = (+parts[1]).toString(16),
+      b = (+parts[2]).toString(16);
+  
+  if (r.length == 1) r = "0" + r;
+  if (g.length == 1) g = "0" + g;
+  if (b.length == 1) b = "0" + b;
+  
+  return "#" + r + g + b;
+}
+
+// 更新工具栏状态
+function updateToolbarState() {
+  if (!document.queryCommandState) return
+  
+  currentStyle.value.bold = document.queryCommandState('bold')
+  currentStyle.value.italic = document.queryCommandState('italic')
+  currentStyle.value.underline = document.queryCommandState('underline')
+  currentStyle.value.strikeThrough = document.queryCommandState('strikeThrough')
+  currentStyle.value.justifyLeft = document.queryCommandState('justifyLeft')
+  currentStyle.value.justifyCenter = document.queryCommandState('justifyCenter')
+  currentStyle.value.justifyRight = document.queryCommandState('justifyRight')
+  
+  const fontName = document.queryCommandValue('fontName')
+  if (fontName) {
+      currentStyle.value.fontName = fontName.replace(/['"]/g, '')
   }
-
-  document.body.removeChild(div)
-  return coordinates
+  currentStyle.value.fontSize = document.queryCommandValue('fontSize') || '3'
+  
+  const foreColor = document.queryCommandValue('foreColor')
+  currentStyle.value.foreColor = rgbToHex(foreColor) || '#000000'
+  
+  const hiliteColor = document.queryCommandValue('hiliteColor') || document.queryCommandValue('backColor')
+  currentStyle.value.hiliteColor = rgbToHex(hiliteColor) || 'transparent'
 }
 
-function updateCursorPosition(username) {
-  nextTick(() => {
-    const textarea = textareaRef.value
-    if (!textarea) return
-    
-    const cursor = remoteCursors.value[username]
-    if (!cursor) return
-    
-    const { top, left, height } = getCaretCoordinates(textarea, cursor.index)
-    cursor.top = top - textarea.scrollTop
-    cursor.left = left - textarea.scrollLeft
-    cursor.height = height
-  })
-}
-
-function handleScroll() {
-  Object.keys(remoteCursors.value).forEach(username => updateCursorPosition(username))
-}
-
-// 监听内容变化，更新所有光标位置
-watch(content, (newVal, oldVal) => {
-  if (oldVal !== undefined && newVal !== oldVal) {
-    // 计算变更差异，自动调整远程光标位置
-    let start = 0
-    while (start < newVal.length && start < oldVal.length && newVal[start] === oldVal[start]) {
-      start++
+let savedRange = null
+function saveSelection() {
+  const sel = window.getSelection()
+  if (sel.rangeCount > 0 && editorRef.value) {
+    const range = sel.getRangeAt(0)
+    // 确保选区在编辑器内部
+    if (editorRef.value.contains(range.commonAncestorContainer)) {
+      savedRange = range.cloneRange()
     }
-
-    let endNew = newVal.length
-    let endOld = oldVal.length
-    while (endNew > start && endOld > start && newVal[endNew - 1] === oldVal[endOld - 1]) {
-      endNew--
-      endOld--
-    }
-
-    const removedLength = endOld - start
-    const addedLength = endNew - start
-    const delta = addedLength - removedLength
-
-    // 更新所有远程光标索引
-    Object.keys(remoteCursors.value).forEach(username => {
-      const cursor = remoteCursors.value[username]
-      if (cursor.index > start) {
-        if (cursor.index < start + removedLength) {
-          // 光标在被删除的内容中，归位到删除点
-          cursor.index = start
-        } else {
-          // 光标在变化点之后，平移
-          cursor.index += delta
-        }
-      }
-    })
   }
+}
 
+function restoreSelection() {
+  if (savedRange) {
+    const sel = window.getSelection()
+    sel.removeAllRanges()
+    sel.addRange(savedRange)
+  }
+}
+
+function openColorPicker(type) {
+  saveSelection()
+  if (type === 'foreColor' && foreColorInput.value) {
+    foreColorInput.value.click()
+  } else if (type === 'hiliteColor' && hiliteColorInput.value) {
+    hiliteColorInput.value.click()
+  }
+}
+
+function onColorInput(command, value) {
+  restoreSelection()
+  // 仅预览，不强制聚焦，避免干扰颜色选择器
+  document.execCommand(command, false, value)
+  // 关键：execCommand 可能会改变 DOM 结构（例如拆分 span），导致旧的 range 失效
+  // execCommand 执行后通常会自动更新选区到新结构上，所以我们需要重新保存这个有效的选区
+  saveSelection()
+  updateToolbarState()
+}
+
+function onColorChange(command, value) {
+  restoreSelection()
+  // 最终确认，执行命令并触发同步
+  execCommand(command, value)
+}
+
+function execCommand(command, value = null) {
+  document.execCommand(command, false, value)
+  if (editorRef.value) {
+    editorRef.value.focus()
+    handleInput()
+    updateToolbarState()
+  }
+}
+
+// 远程光标相关函数已移除，暂不支持 HTML 光标同步
+function handleScroll() {}
+
+// 监听内容变化
+watch(content, (newVal) => {
+  if (editorRef.value && editorRef.value.innerHTML !== newVal) {
+    editorRef.value.innerHTML = newVal
+  }
+  // 内容变化后，远程光标位置可能需要更新（虽然这里没有重新计算，但至少不会报错）
   nextTick(() => {
-    Object.keys(remoteCursors.value).forEach(updateCursorPosition)
+      Object.keys(remoteCursors.value).forEach(updateCursorPosition)
   })
 })
 
@@ -207,57 +223,217 @@ function handleLogout() {
 // 编辑内容
 let isReceiving = false
 function handleInput() {
-  if (!isReceiving && isConnected.value) {
-    sendJson('EDIT', currentUsername.value, content.value)
+  if (!editorRef.value) return
+  const newContent = editorRef.value.innerHTML
+  
+  // 只有当内容真正改变时才发送
+  if (content.value !== newContent) {
+      content.value = newContent
+      if (!isReceiving && isConnected.value) {
+        sendJson('EDIT', currentUsername.value, content.value)
+      }
   }
+}
+
+// 远程光标相关函数
+// 获取节点在父节点中的索引
+function getNodeIndex(node) {
+  let i = 0;
+  while( (node = node.previousSibling) ) {
+    i++;
+  }
+  return i;
+}
+
+// 获取光标位置（路径 + 偏移）
+function getCursorLocation() {
+  const selection = window.getSelection();
+  if (!selection.rangeCount) return null;
+  const range = selection.getRangeAt(0);
+  const root = editorRef.value;
+  
+  if (!root || !root.contains(range.startContainer)) return null;
+
+  let node = range.startContainer;
+  const path = [];
+  
+  while (node !== root) {
+    path.unshift(getNodeIndex(node));
+    node = node.parentNode;
+  }
+  
+  return {
+    path: path,
+    offset: range.startOffset
+  };
+}
+
+// 根据路径获取节点
+function getNodeByPath(root, path) {
+  let node = root;
+  for (const index of path) {
+    if (!node || !node.childNodes || index >= node.childNodes.length) return null;
+    node = node.childNodes[index];
+  }
+  return node;
+}
+
+// 计算坐标
+function getCoordinates(path, offset) {
+  const root = editorRef.value;
+  if (!root) return null;
+  const node = getNodeByPath(root, path);
+  if (!node) return null;
+
+  try {
+    const range = document.createRange();
+    
+    // 处理文本节点
+    if (node.nodeType === 3) {
+        const safeOffset = Math.min(offset, node.length);
+        range.setStart(node, safeOffset);
+        range.setEnd(node, safeOffset);
+        const rects = range.getClientRects();
+        if (rects.length > 0) return rects[0];
+    } 
+    // 处理元素节点
+    else if (node.nodeType === 1) {
+        const safeOffset = Math.min(offset, node.childNodes.length);
+        // 尝试插入临时元素测量
+        const span = document.createElement('span');
+        span.textContent = '\u200b'; // Zero-width space
+        
+        if (safeOffset >= node.childNodes.length) {
+            node.appendChild(span);
+        } else {
+            node.insertBefore(span, node.childNodes[safeOffset]);
+        }
+        
+        const rect = span.getBoundingClientRect();
+        span.remove();
+        return rect;
+    }
+  } catch (e) {
+    console.error('Error calculating cursor coordinates', e);
+  }
+  return null;
+}
+
+function updateCursorPosition(username) {
+    const cursor = remoteCursors.value[username];
+    if (!cursor || !cursor.data) return;
+    
+    try {
+        const loc = typeof cursor.data === 'string' ? JSON.parse(cursor.data) : cursor.data;
+        const rect = getCoordinates(loc.path, loc.offset);
+        
+        if (rect) {
+            const paper = editorRef.value.parentElement;
+            const paperRect = paper.getBoundingClientRect();
+            
+            cursor.top = rect.top - paperRect.top;
+            cursor.left = rect.left - paperRect.left;
+            cursor.height = rect.height || 20;
+            cursor.visible = true;
+        } else {
+            cursor.visible = false;
+        }
+    } catch (e) {
+        console.error(e);
+    }
 }
 
 function handleCursorMove(e) {
-  if (!isConnected.value) return
-  const textarea = e.target
-  const index = textarea.selectionStart
-  sendJson('CURSOR', currentUsername.value, index.toString())
+  if (!isConnected.value) return;
+  
+  // 更新工具栏状态
+  updateToolbarState();
+
+  const loc = getCursorLocation();
+  if (loc) {
+    sendJson('CURSOR', currentUsername.value, JSON.stringify(loc));
+  }
 }
 
-// 辅助函数：更新内容并保持光标相对位置
-function updateContentPreservingCursor(newContent) {
-  const textarea = textareaRef.value
-  if (!textarea) {
-    content.value = newContent
-    return
+// 获取当前光标相对于纯文本的偏移量
+function getCursorTextOffset() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return 0;
+  const range = sel.getRangeAt(0);
+  
+  // 插入标记字符
+  const marker = document.createTextNode('\uFEFF');
+  range.insertNode(marker);
+  const text = editorRef.value.textContent;
+  const offset = text.indexOf('\uFEFF');
+  marker.remove();
+  editorRef.value.normalize(); // 合并被分割的文本节点
+  return offset === -1 ? 0 : offset;
+}
+
+// 根据纯文本偏移量设置光标
+function setCursorByTextOffset(offset) {
+  const root = editorRef.value;
+  if (!root) return;
+  
+  const nodeIterator = document.createNodeIterator(root, NodeFilter.SHOW_TEXT);
+  let currentNode;
+  let currentOffset = 0;
+  
+  while ((currentNode = nodeIterator.nextNode())) {
+    const length = currentNode.textContent.length;
+    if (currentOffset + length >= offset) {
+      const range = document.createRange();
+      const pos = Math.max(0, Math.min(length, offset - currentOffset));
+      range.setStart(currentNode, pos);
+      range.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      return;
+    }
+    currentOffset += length;
   }
+  
+  // Fallback: set to end
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
 
-  const oldContent = content.value
-  const currentPos = textarea.selectionStart
-  const currentEnd = textarea.selectionEnd
+// 辅助函数：更新内容
+function updateContentPreservingCursor(newHtml) {
+  if (!editorRef.value) return;
+  if (editorRef.value.innerHTML === newHtml) return;
 
-  // 1. 找到第一个不同的字符位置
-  let start = 0
-  while (
-    start < oldContent.length &&
-    start < newContent.length &&
-    oldContent[start] === newContent[start]
-  ) {
-    start++
+  // 1. 保存当前光标位置（基于文本偏移）
+  const savedOffset = getCursorTextOffset();
+  const oldText = editorRef.value.textContent;
+  
+  // 2. 更新内容
+  editorRef.value.innerHTML = newHtml;
+  content.value = newHtml;
+  
+  const newText = editorRef.value.textContent;
+  
+  // 3. 计算文本差异，调整光标位置
+  let start = 0;
+  while (start < oldText.length && start < newText.length && oldText[start] === newText[start]) {
+    start++;
   }
-
-  // 2. 计算长度变化
-  const lengthDiff = newContent.length - oldContent.length
-
-  // 3. 更新数据
-  content.value = newContent
-
-  // 4. 调整光标
-  if (currentPos > start) {
-    const newPos = Math.max(start, currentPos + lengthDiff)
-    nextTick(() => {
-      textarea.setSelectionRange(newPos, newPos)
-    })
-  } else {
-    nextTick(() => {
-      textarea.setSelectionRange(currentPos, currentEnd)
-    })
+  
+  const lengthDiff = newText.length - oldText.length;
+  
+  let newOffset = savedOffset;
+  if (savedOffset > start) {
+    newOffset = Math.max(start, savedOffset + lengthDiff);
   }
+  
+  // 4. 恢复光标
+  setCursorByTextOffset(newOffset);
 }
 
 // 监听消息
@@ -304,7 +480,7 @@ watch(() => messages.value, (newMessages) => {
         }
         
         const cursor = remoteCursors.value[data.sender] || {}
-        cursor.index = parseInt(data.data)
+        cursor.data = data.data
         cursor.color = user.color
         cursor.name = data.sender
         remoteCursors.value[data.sender] = cursor
@@ -678,12 +854,12 @@ onMounted(async () => {
     <!-- 工具栏 -->
     <div class="toolbar">
       <div class="toolbar-group">
-        <button class="tool-btn" title="撤销">
+        <button class="tool-btn" title="撤销" @mousedown.prevent @click="execCommand('undo')">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
             <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
           </svg>
         </button>
-        <button class="tool-btn" title="重做">
+        <button class="tool-btn" title="重做" @mousedown.prevent @click="execCommand('redo')">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
             <path d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.05-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/>
           </svg>
@@ -691,17 +867,87 @@ onMounted(async () => {
       </div>
       <div class="toolbar-divider"></div>
       <div class="toolbar-group">
-        <button class="tool-btn" title="加粗">B</button>
-        <button class="tool-btn" title="斜体"><em>I</em></button>
-        <button class="tool-btn" title="下划线"><u>U</u></button>
+        <select class="tool-select" :value="currentStyle.fontName" @change="execCommand('fontName', $event.target.value)">
+          <option value="Arial">Arial</option>
+          <option value="Times New Roman">Times New Roman</option>
+          <option value="Courier New">Courier New</option>
+          <option value="Georgia">Georgia</option>
+          <option value="Verdana">Verdana</option>
+          <option value="Microsoft YaHei">微软雅黑</option>
+          <option value="SimSun">宋体</option>
+          <option value="SimHei">黑体</option>
+          <option value="KaiTi">楷体</option>
+          <option value="FangSong">仿宋</option>
+          <option value="STHeiti">华文黑体</option>
+          <option value="STKaiti">华文楷体</option>
+          <option value="STSong">华文宋体</option>
+          <option value="STFangsong">华文仿宋</option>
+          <option value="STXinwei">华文新魏</option>
+          <option value="STXingkai">华文行楷</option>
+          <option value="STLiti">华文隶书</option>
+        </select>
+        <select class="tool-select" :value="currentStyle.fontSize" @change="execCommand('fontSize', $event.target.value)">
+          <option value="1">小号</option>
+          <option value="2">中号</option>
+          <option value="3">大号</option>
+          <option value="4">特大</option>
+          <option value="5">超大</option>
+          <option value="6">巨大</option>
+          <option value="7">最大</option>
+        </select>
       </div>
       <div class="toolbar-divider"></div>
       <div class="toolbar-group">
-        <select class="tool-select">
-          <option>正文</option>
-          <option>标题1</option>
-          <option>标题2</option>
-          <option>标题3</option>
+        <button class="tool-btn" :class="{ active: currentStyle.bold }" title="加粗" @mousedown.prevent @click="execCommand('bold')"><b>B</b></button>
+        <button class="tool-btn" :class="{ active: currentStyle.italic }" title="斜体" @mousedown.prevent @click="execCommand('italic')"><em>I</em></button>
+        <button class="tool-btn" :class="{ active: currentStyle.underline }" title="下划线" @mousedown.prevent @click="execCommand('underline')"><u>U</u></button>
+        <button class="tool-btn" :class="{ active: currentStyle.strikeThrough }" title="删除线" @mousedown.prevent @click="execCommand('strikeThrough')"><s>S</s></button>
+      </div>
+      <div class="toolbar-divider"></div>
+      <div class="toolbar-group">
+        <button class="tool-btn" title="文字颜色" @mousedown.prevent="openColorPicker('foreColor')">
+            <span style="font-weight: bold; color: #000;">A</span>
+            <div :style="{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', height: '3px', background: currentStyle.foreColor }"></div>
+        </button>
+        <input 
+            ref="foreColorInput"
+            type="color" 
+            style="visibility: hidden; position: absolute; width: 0; height: 0;" 
+            @input="onColorInput('foreColor', $event.target.value)"
+            @change="onColorChange('foreColor', $event.target.value)"
+        />
+        
+        <button class="tool-btn" title="背景颜色" @mousedown.prevent="openColorPicker('hiliteColor')">
+            <span style="font-weight: bold; background: #000; color: #fff; padding: 0 2px;">A</span>
+            <div :style="{ position: 'absolute', bottom: '4px', left: '4px', right: '4px', height: '3px', background: currentStyle.hiliteColor }"></div>
+        </button>
+        <input 
+            ref="hiliteColorInput"
+            type="color" 
+            style="visibility: hidden; position: absolute; width: 0; height: 0;" 
+            @input="onColorInput('hiliteColor', $event.target.value)"
+            @change="onColorChange('hiliteColor', $event.target.value)"
+        />
+      </div>
+      <div class="toolbar-divider"></div>
+      <div class="toolbar-group">
+        <button class="tool-btn" :class="{ active: currentStyle.justifyLeft }" title="左对齐" @mousedown.prevent @click="execCommand('justifyLeft')">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M15 15H3v2h12v-2zm0-8H3v2h12V7zM3 13h18v-2H3v2zm0 8h18v-2H3v2zM3 3v2h18V3H3z"/></svg>
+        </button>
+        <button class="tool-btn" :class="{ active: currentStyle.justifyCenter }" title="居中" @mousedown.prevent @click="execCommand('justifyCenter')">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M7 15v2h10v-2H7zm-4 6h18v-2H3v2zm0-8h18v-2H3v2zm4-6v2h10V7H7zM3 3v2h18V3H3z"/></svg>
+        </button>
+        <button class="tool-btn" :class="{ active: currentStyle.justifyRight }" title="右对齐" @mousedown.prevent @click="execCommand('justifyRight')">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 21h18v-2H3v2zm6-4h12v-2H9v2zm-6-4h18v-2H3v2zm6-4h12V7H9v2zM3 3v2h18V3H3z"/></svg>
+        </button>
+      </div>
+      <div class="toolbar-divider"></div>
+      <div class="toolbar-group">
+        <select class="tool-select" @change="execCommand('formatBlock', $event.target.value)">
+          <option value="p">正文</option>
+          <option value="h1">标题1</option>
+          <option value="h2">标题2</option>
+          <option value="h3">标题3</option>
         </select>
       </div>
     </div>
@@ -711,24 +957,24 @@ onMounted(async () => {
       <!-- 编辑区域 -->
       <div class="editor-container">
         <div class="paper" style="position: relative;">
-          <textarea
-            ref="textareaRef"
-            v-model="content"
+          <div
+            ref="editorRef"
             class="editor"
+            contenteditable="true"
+            spellcheck="false"
             :placeholder="isConnected ? '开始输入内容...' : '请先登录或选择文档'"
-            :disabled="!isConnected"
             @input="handleInput"
             @keyup="handleCursorMove"
             @click="handleCursorMove"
-            @select="handleCursorMove"
-            @scroll="handleScroll"
-          ></textarea>
+            @blur="handleCursorMove"
+          ></div>
 
           <!-- 远程光标 -->
           <div
             v-for="(cursor, username) in remoteCursors"
             :key="username"
             class="remote-cursor"
+            v-show="cursor.visible !== false"
             :style="{
               top: cursor.top + 'px',
               left: cursor.left + 'px',
@@ -1291,10 +1537,16 @@ onMounted(async () => {
   color: #444;
   font-size: 14px;
   font-weight: 600;
+  position: relative;
 }
 
 .tool-btn:hover {
   background: #f1f3f4;
+}
+
+.tool-btn.active {
+  background: #e8f0fe;
+  color: #1a73e8;
 }
 
 .tool-select {
@@ -1486,6 +1738,13 @@ onMounted(async () => {
   line-height: 1.8;
   color: #202124;
   resize: none;
+  overflow-y: auto;
+}
+
+.editor[contenteditable]:empty:before {
+  content: attr(placeholder);
+  color: #9aa0a6;
+  display: block;
 }
 
 .editor::placeholder {
