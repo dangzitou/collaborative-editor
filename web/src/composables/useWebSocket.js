@@ -8,6 +8,7 @@ export function useWebSocket() {
   const isConnected = ref(false)
   const messages = ref([])
   const connectionError = ref(null)
+  let heartbeatTimer = null
 
   let messageId = 0
 
@@ -44,6 +45,7 @@ export function useWebSocket() {
       socket.value.onopen = () => {
         isConnected.value = true
         addMessage('system', 'WebSocket 连接成功')
+        startHeartbeat()
       }
 
       socket.value.onmessage = (event) => {
@@ -62,6 +64,7 @@ export function useWebSocket() {
 
       socket.value.onclose = (event) => {
         isConnected.value = false
+        stopHeartbeat()
         addMessage('system', `连接关闭 (code: ${event.code}, reason: ${event.reason || '无'})`)
         socket.value = null
         
@@ -85,9 +88,33 @@ export function useWebSocket() {
    * 断开连接
    */
   function disconnect() {
+    stopHeartbeat()
     if (socket.value) {
       socket.value.close()
       socket.value = null
+    }
+  }
+
+  /**
+   * 启动心跳
+   */
+  function startHeartbeat() {
+    stopHeartbeat()
+    heartbeatTimer = setInterval(() => {
+      if (socket.value && socket.value.readyState === WebSocket.OPEN) {
+        const message = { type: 'PING', sender: 'system', data: 'ping' }
+        socket.value.send(JSON.stringify(message))
+      }
+    }, 30000)
+  }
+
+  /**
+   * 停止心跳
+   */
+  function stopHeartbeat() {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer)
+      heartbeatTimer = null
     }
   }
 
