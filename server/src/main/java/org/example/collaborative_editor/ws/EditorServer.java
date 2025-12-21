@@ -198,7 +198,10 @@ public class EditorServer {
             listMsg.setSender(WsMessageType.SENDER_SERVER);
             listMsg.setData(objectMapper.writeValueAsString(userList));
 
-            session.getAsyncRemote().sendText(objectMapper.writeValueAsString(listMsg));
+            // 使用 synchronized 避免并发写入
+            synchronized (session) {
+                session.getBasicRemote().sendText(objectMapper.writeValueAsString(listMsg));
+            }
         } catch (IOException e) {
             log.error("发送用户列表失败", e);
         }
@@ -212,7 +215,10 @@ public class EditorServer {
                 syncMsg.setData(content);
 
                 String json = objectMapper.writeValueAsString(syncMsg);
-                session.getAsyncRemote().sendText(json);
+                // 使用 synchronized 避免并发写入
+                synchronized (session) {
+                    session.getBasicRemote().sendText(json);
+                }
             } catch (IOException e) {
                 log.error("发送同步消息失败", e);
             }

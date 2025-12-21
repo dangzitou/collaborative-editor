@@ -48,7 +48,7 @@ watch(isLoggedIn, async (newVal) => {
       }
     }
   }
-})
+}, { immediate: true })
 
 // 当前用户名（登录后使用真实用户名）
 const currentUsername = computed(() => {
@@ -196,6 +196,17 @@ function handleConnect() {
   const wsUrl = serverUrl.value + docId.value + '?token=' + token.value + '&username=' + encodeURIComponent(currentUsername.value)
   connect(wsUrl, {
     onClose: (event) => {
+      // Token 无效或过期
+      if (event.code === 1008) {
+        logout()
+        // 避免 alert 阻塞，使用 setTimeout
+        setTimeout(() => {
+          alert('登录已过期，请重新登录')
+          showAuthModal.value = true
+        }, 100)
+        return
+      }
+
       if (event.code === 1003 || event.reason === "Document not found") {
         showMessage('文档不存在或已被删除', () => {
           window.location.href = '/'
