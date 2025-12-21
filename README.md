@@ -57,7 +57,16 @@ collaborative-editor/
 │   │   └── mime.types      # MIME 类型配置
 │   ├── logs/               # 日志目录
 │   ├── nginx.exe           # Nginx 主程序
-│   └── start.bat           # 启动脚本
+├── scripts/                # 启动与运维脚本（推荐使用）
+│   ├── start-all-dev.bat   # 一键启动前后端+Nginx+自动打开浏览器
+│   ├── start-backend.bat   # 启动后端服务
+│   ├── start-frontend-dev.bat # 启动前端开发服务器
+│   ├── build-frontend.bat  # 构建前端生产包
+│   ├── nginx-start.bat     # 启动 Nginx
+│   ├── nginx-stop.bat      # 停止 Nginx
+│   ├── nginx-reload.bat    # 重载 Nginx 配置
+│   ├── init-db.bat         # 数据库初始化脚本（手动输入密码）
+│   └── init.sql            # MySQL 初始化脚本
 └── README.md
 ```
 
@@ -160,15 +169,22 @@ mysql -u root -p --default-character-set=utf8mb4
 - `root` 替换为你自己的 MySQL 用户名
 - 输入密码后进入 MySQL 命令行
 
+
 #### 1.2 执行初始化脚本
 
-在 MySQL 命令行中执行：
+推荐直接运行：
 
-```sql
-source server/src/main/resources/sql/init.sql
+```bat
+scripts\init-db.bat
 ```
 
-或者复制 `init.sql` 中的内容手动执行。
+按提示输入数据库密码即可自动导入。
+
+或者进入 MySQL 命令行后执行：
+
+```sql
+source scripts/init.sql
+```
 
 ### 2. Redis 配置
 
@@ -432,51 +448,44 @@ nginx/
 └── setup.bat           # 构建并复制前端文件
 ```
 
-### 首次运行
 
-首次运行需要创建运行时目录：
+---
 
-```bash
-cd nginx
-mkdir logs
-mkdir temp
-mkdir temp\client_body_temp temp\proxy_temp temp\fastcgi_temp temp\uwsgi_temp temp\scgi_temp
+## 一键启动与脚本说明
+
+推荐使用 `scripts/` 目录下的批处理脚本进行开发和本地部署：
+
+### 一键启动（推荐）
+
+```bat
+scripts\start-all-dev.bat
 ```
 
-或者双击 `setup.bat` 自动完成。
+此脚本会自动：
+1. 启动 Nginx（自动检测并重载或启动）
+2. 启动后端服务（新窗口）
+3. 启动前端开发服务器（新窗口）
+4. 自动打开浏览器访问 http://localhost
 
-### 启动 Nginx
+### 其他常用脚本
 
-方法一：双击 `nginx/nginx.exe`
+| 脚本 | 说明 |
+|------|------|
+| start-backend.bat | 启动后端 Spring Boot 服务 |
+| start-frontend-dev.bat | 启动前端开发服务器（热更新）|
+| build-frontend.bat | 构建前端生产包 |
+| nginx-start.bat / nginx-stop.bat / nginx-reload.bat | 启动/停止/重载 Nginx |
+| init-db.bat | 初始化数据库（手动输入密码）|
 
-方法二：双击 `nginx/start.bat`
+所有脚本均可在 Windows 下直接双击运行。
 
-方法三：命令行
+---
 
-```bash
-cd nginx
-.\nginx.exe
-```
+## Nginx 部署说明
 
-### 停止 Nginx
+Nginx 相关操作建议统一使用 `scripts/` 目录下的脚本，不再推荐使用 `nginx/` 目录下的旧脚本。
 
-```bash
-cd nginx
-.\nginx.exe -s stop
-```
-
-或双击 `nginx/stop.bat`
-
-### 重载配置
-
-修改 `nginx/conf/nginx.conf` 后：
-
-```bash
-cd nginx
-.\nginx.exe -s reload
-```
-
-或双击 `nginx/reload.bat`
+如需手动操作，可直接运行 `nginx.exe` 或使用命令行。
 
 ### 访问地址
 
