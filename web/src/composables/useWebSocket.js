@@ -11,6 +11,8 @@ export function useWebSocket() {
   let heartbeatTimer = null
 
   let messageId = 0
+  const pingDelay = ref(null) // ms
+  let lastPingSentAt = 0
 
   /**
    * 添加日志消息
@@ -58,8 +60,35 @@ export function useWebSocket() {
         } catch (e) {
           // 保持原始文本
         }
-        
-        addMessage('received', displayContent, parsed || event.data)
+
+        // 更宽松地识别 PONG 响应（兼容多种后端实现）
+        let handledAsPong = false
+        try {
+          // parsed 对象优先判断
+          if (parsed) {
+            // 常见：后端返回 type: 'PONG'
+            if (parsed.type === 'PONG') handledAsPong = true
+            // 有的实现会回传 type:'PING' 但 data:'pong' 或类似
+            if (!handledAsPong && parsed.type === 'PING' && parsed.sender === 'server' && typeof parsed.data === 'string' && /pong/i.test(parsed.data)) handledAsPong = true
+          }
+
+          // 原始文本也可能包含 pong 字样
+          if (!handledAsPong && typeof displayContent === 'string' && /\bpong\b/i.test(displayContent)) handledAsPong = true
+
+          if (handledAsPong) {
+            if (lastPingSentAt) {
+              pingDelay.value = Date.now() - lastPingSentAt
+              lastPingSentAt = 0
+            }
+            addMessage('system', `PONG received, 延迟 ${pingDelay.value ?? '-'} ms`)
+            console.debug('[WebSocket] PONG detected, delay:', pingDelay.value)
+          } else {
+            addMessage('received', displayContent, parsed || event.data)
+          }
+        } catch (e) {
+          // 兜底：正常展示
+          addMessage('received', displayContent, parsed || event.data)
+        }
       }
 
       socket.value.onclose = (event) => {
@@ -100,12 +129,24 @@ export function useWebSocket() {
    */
   function startHeartbeat() {
     stopHeartbeat()
-    heartbeatTimer = setInterval(() => {
+    // 立即发送一次 ping，后续按间隔发送
+    const doPing = () => {
       if (socket.value && socket.value.readyState === WebSocket.OPEN) {
         const message = { type: 'PING', sender: 'system', data: 'ping' }
-        socket.value.send(JSON.stringify(message))
+        try {
+          lastPingSentAt = Date.now()
+          const text = JSON.stringify(message)
+          socket.value.send(text)
+          addMessage('sent', text)
+          console.debug('[WebSocket] PING sent')
+        } catch (e) {
+          lastPingSentAt = 0
+        }
       }
-    }, 30000)
+    }
+
+    doPing()
+    heartbeatTimer = setInterval(doPing, 5000)
   }
 
   /**
@@ -177,6 +218,7 @@ export function useWebSocket() {
     isConnected: readonly(isConnected),
     messages: readonly(messages),
     connectionError: readonly(connectionError),
+    pingDelay: readonly(pingDelay),
     connect,
     disconnect,
     sendJson,

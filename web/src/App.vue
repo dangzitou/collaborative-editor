@@ -9,7 +9,8 @@ const {
   messages,
   connect,
   disconnect,
-  sendJson
+  sendJson,
+  pingDelay
 } = useWebSocket()
 
 const { user, token, isLoggedIn, logout } = useAuth()
@@ -960,6 +961,10 @@ onMounted(async () => {
           <option value="h2">标题2</option>
           <option value="h3">标题3</option>
         </select>
+      </div>
+      <div class="toolbar-right-info" style="margin-left: auto; display:flex; align-items:center; gap:12px; color: #5f6368; font-size:13px;">
+        <div v-if="isConnected">延迟: {{ pingDelay !== null ? pingDelay : '-' }} ms</div>
+        <div v-else>未连接</div>
       </div>
     </div>
 

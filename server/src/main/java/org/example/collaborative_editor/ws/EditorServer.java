@@ -260,6 +260,17 @@ public class EditorServer {
                 String username = (String) session.getUserProperties().get("username");
                 msg.setSender(username);
                 broadcast(objectMapper.writeValueAsString(msg), session);
+            } else if ("PING".equals(msg.getType())) {
+                // 收到 PING，回复 PONG
+                // log.info("ping:{}", msg);
+                WsMessage pong = new WsMessage();
+                pong.setType("PONG");
+                pong.setSender(WsMessageType.SENDER_SERVER);
+                pong.setData("pong");
+                synchronized (session) {
+                    session.getBasicRemote().sendText(objectMapper.writeValueAsString(pong));
+                    // log.info("pong:{}", pong);
+                }
             }
         } catch (IOException e) {
             log.error("解析消息失败: {}", messageStr, e);
