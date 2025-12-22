@@ -20,7 +20,8 @@ const {
   connect,
   disconnect,
   sendJson,
-  pingDelay
+  pingDelay,
+  clearMessages
 } = useWebSocket()
 
 const { user, token, isLoggedIn, logout } = useAuth()
@@ -297,6 +298,7 @@ function handleConnect() {
       }
     }
   })
+  remoteCursors.value = {}
   onlineUsers.value = [{ name: currentUsername.value, color: '#1a73e8' }]
 }
 
@@ -841,6 +843,12 @@ function openDoc(doc) {
   window.history.pushState({}, '', url)
   
   if (isConnected.value) disconnect()
+  clearMessages()
+  
+  // 切换文档时彻底清空状态
+  onlineUsers.value = []
+  remoteCursors.value = {}
+  
   handleConnect()
   
   showListModal.value = false
@@ -903,6 +911,29 @@ onMounted(async () => {
     }
   }
 })
+
+async function updateDocTitle() {
+  isEditingTitle.value = false
+  if (!docId.value || !docTitle.value) return
+  
+  try {
+    const res = await fetch(`/api/doc/${docId.value}/title`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token.value
+      },
+      body: JSON.stringify({ title: docTitle.value })
+    })
+    const data = await res.json()
+    if (data.code !== 200) {
+      showMessage(data.message || '修改标题失败')
+    }
+  } catch (e) {
+    console.error(e)
+    showMessage('修改标题失败')
+  }
+}
 </script>
 
 <template>
@@ -928,8 +959,8 @@ onMounted(async () => {
             v-else
             v-model="docTitle"
             class="doc-title-input"
-            @blur="isEditingTitle = false"
-            @keyup.enter="isEditingTitle = false"
+            @blur="updateDocTitle"
+            @keyup.enter="updateDocTitle"
             autofocus
           >
           <div class="doc-status">

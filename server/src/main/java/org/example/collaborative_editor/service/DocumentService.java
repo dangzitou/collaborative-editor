@@ -40,4 +40,9 @@ public interface DocumentService {
      * 使用邀请码加入文档
      */
     Document joinByInviteCode(String code);
+
+    /**
+     * 修改文档标题
+     */
+    void updateTitle(String docId, String title);
 }
