@@ -303,6 +303,16 @@ function handleConnect() {
 }
 
 function handleDisconnect() {
+  // 清理定时器
+  if (sendTimer) {
+    clearTimeout(sendTimer)
+    sendTimer = null
+  }
+  if (updateContentPreservingCursor.delayTimer) {
+    clearTimeout(updateContentPreservingCursor.delayTimer)
+    updateContentPreservingCursor.delayTimer = null
+  }
+  
   disconnect()
   onlineUsers.value = []
 }
@@ -318,6 +328,9 @@ function handleLogout() {
 
 // 编辑内容
 let isReceiving = false
+let sendTimer = null
+let lastSentContent = ''
+
 function handleInput() {
   if (!editorRef.value) return
   const newContent = editorRef.value.innerHTML
@@ -325,8 +338,22 @@ function handleInput() {
   // 只有当内容真正改变时才发送
   if (content.value !== newContent) {
       content.value = newContent
+      
+      // 清除之前的定时器
+      if (sendTimer) {
+        clearTimeout(sendTimer)
+      }
+      
+      // 使用防抖：用户停止输入300ms后再发送
       if (!isReceiving && isConnected.value) {
-        sendJson('EDIT', currentUsername.value, content.value)
+        sendTimer = setTimeout(() => {
+          // 再次检查内容是否真的改变了（避免重复发送）
+          if (lastSentContent !== content.value) {
+            lastSentContent = content.value
+            sendJson('EDIT', currentUsername.value, content.value)
+          }
+          sendTimer = null
+        }, 300)
       }
   }
 }
@@ -505,6 +532,24 @@ function updateContentPreservingCursor(newHtml) {
   if (!editorRef.value) return;
   if (editorRef.value.innerHTML === newHtml) return;
 
+  // 检查是否正在输入（通过检查是否有待发送的定时器）
+  const isTyping = sendTimer !== null
+  
+  // 如果正在输入，延迟应用远程更新，避免打断输入
+  if (isTyping) {
+    console.log('[协同] 用户正在输入，延迟应用远程更新')
+    // 清除旧的延迟更新定时器
+    if (updateContentPreservingCursor.delayTimer) {
+      clearTimeout(updateContentPreservingCursor.delayTimer)
+    }
+    // 延迟500ms后再尝试更新
+    updateContentPreservingCursor.delayTimer = setTimeout(() => {
+      updateContentPreservingCursor(newHtml)
+      updateContentPreservingCursor.delayTimer = null
+    }, 500)
+    return
+  }
+
   // 1. 保存当前光标位置（基于文本偏移）
   const savedOffset = getCursorTextOffset();
   const oldText = editorRef.value.textContent;
@@ -544,11 +589,16 @@ watch(() => messages.value, (newMessages) => {
 
     if (data.type === 'SYNC' || data.type === 'EDIT') {
       isReceiving = true
+      
       if (data.type === 'EDIT') {
+        // 对于 EDIT 消息，使用智能合并策略
         updateContentPreservingCursor(data.data || '')
       } else {
+        // 对于 SYNC 消息（初次加载），直接应用
         content.value = data.data || ''
+        lastSentContent = content.value
       }
+      
       // 如果存在 pendingDoc，说明我们刚刚切换到此 doc 并等待加载，加载成功后应用标题
       try {
         if (pendingDoc.value && pendingDoc.value.docId === docId.value) {
@@ -574,7 +624,7 @@ watch(() => messages.value, (newMessages) => {
           color: colors[onlineUsers.value.length % colors.length]
         })
       }
-      setTimeout(() => { isReceiving = false }, 50)
+      setTimeout(() => { isReceiving = false }, 100)
     } else if (data.type === 'USER_JOIN') {
       if (data.sender && data.sender !== 'server' && !onlineUsers.value.find(u => u.name === data.sender)) {
         onlineUsers.value.push({
@@ -823,6 +873,16 @@ async function confirmDelete() {
 }
 
 function openDoc(doc) {
+  // 清理定时器
+  if (sendTimer) {
+    clearTimeout(sendTimer)
+    sendTimer = null
+  }
+  if (updateContentPreservingCursor.delayTimer) {
+    clearTimeout(updateContentPreservingCursor.delayTimer)
+    updateContentPreservingCursor.delayTimer = null
+  }
+  
   // 记录上一个已打开的文档（用于在权限不足时回退）
   if (docId.value && docId.value !== 'doc-001') {
     previousDoc.value = {
