@@ -1,3 +1,13 @@
+// 防止 docId 被清空时所有状态残留
+watch(docId, (newVal) => {
+  if (!newVal) {
+    docTitle.value = '未命名文档'
+    content.value = ''
+    onlineUsers.value = []
+    remoteCursors.value = {}
+    isEditingTitle.value = false
+  }
+})
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useWebSocket } from './composables/useWebSocket'
@@ -22,6 +32,8 @@ const showUserMenu = ref(false)
 // 文档信息
 const docTitle = ref('未命名文档')
 const docId = ref('doc-001')
+const previousDoc = ref(null)
+const pendingDoc = ref(null)
 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
 const host = window.location.host
 const serverUrl = ref(`${protocol}//${host}/editor/`)
@@ -196,15 +208,66 @@ watch(content, (newVal) => {
 function handleConnect() {
   const wsUrl = serverUrl.value + docId.value + '?token=' + token.value + '&username=' + encodeURIComponent(currentUsername.value)
   connect(wsUrl, {
+    onOpen: () => {
+      try {
+        if (pendingDoc.value && pendingDoc.value.docId === docId.value) {
+          docTitle.value = pendingDoc.value.title || '未命名文档'
+          pendingDoc.value = null
+        }
+      } catch (e) { console.warn(e) }
+    },
     onClose: (event) => {
       // 优先 reason 判断
       if (event.reason === '无权限操作此文档') {
         showMessage('无权限操作此文档', () => {
-          // 清空当前文档ID，回首页或停留，并移除 URL docId 参数，防止自动重连
+          // 如果存在上一个文档，恢复到上一个文档并刷新标题与内容
+          if (previousDoc.value && previousDoc.value.docId) {
+            // 先断开当前连接（若有）
+            if (isConnected.value) disconnect()
+
+            docId.value = previousDoc.value.docId
+            docTitle.value = previousDoc.value.title || '未命名文档'
+            content.value = previousDoc.value.content || ''
+
+            // 更新 URL
+            const url = new URL(window.location)
+            url.searchParams.set('docId', docId.value)
+            window.history.replaceState({}, '', url)
+
+            // 重新连接
+            handleConnect()
+            // 清除 previousDoc，避免循环
+            previousDoc.value = null
+            return
+          }
+
+          // 如果没有 previousDoc，尝试从 sessionStorage 恢复上次成功打开的文档
+          try {
+            const raw = sessionStorage.getItem('lastDoc')
+            if (raw) {
+              const last = JSON.parse(raw)
+              if (last && last.docId) {
+                // 恢复到 lastDoc
+                docId.value = last.docId
+                docTitle.value = last.title || '未命名文档'
+                content.value = last.content || ''
+                const url = new URL(window.location)
+                url.searchParams.set('docId', docId.value)
+                window.history.replaceState({}, '', url)
+                // 重新连接
+                if (isConnected.value) disconnect()
+                handleConnect()
+                return
+              }
+            }
+          } catch (e) {
+            console.warn('读取 sessionStorage.lastDoc 失败', e)
+          }
+
+          // 否则清空当前文档并移除 URL，停留首页样式
           docId.value = ''
           docTitle.value = '未命名文档'
           content.value = ''
-          // 移除 URL docId 参数
           const url = new URL(window.location)
           url.searchParams.delete('docId')
           window.history.replaceState({}, '', url)
@@ -484,6 +547,24 @@ watch(() => messages.value, (newMessages) => {
       } else {
         content.value = data.data || ''
       }
+      // 如果存在 pendingDoc，说明我们刚刚切换到此 doc 并等待加载，加载成功后应用标题
+      try {
+        if (pendingDoc.value && pendingDoc.value.docId === docId.value) {
+          docTitle.value = pendingDoc.value.title || docTitle.value
+          pendingDoc.value = null
+        }
+      } catch (e) { console.warn(e) }
+      // 成功从服务端同步到内容时，记录为最近打开的文档（用于回退）
+      try {
+        const last = {
+          docId: docId.value,
+          title: docTitle.value,
+          content: content.value
+        }
+        sessionStorage.setItem('lastDoc', JSON.stringify(last))
+      } catch (e) {
+        console.warn('无法写入 sessionStorage.lastDoc', e)
+      }
       // 添加协作者 (兼容旧逻辑，防止 USER_LIST 失败)
       if (data.sender && data.sender !== 'server' && !onlineUsers.value.find(u => u.name === data.sender)) {
         onlineUsers.value.push({
@@ -740,8 +821,18 @@ async function confirmDelete() {
 }
 
 function openDoc(doc) {
+  // 记录上一个已打开的文档（用于在权限不足时回退）
+  if (docId.value && docId.value !== 'doc-001') {
+    previousDoc.value = {
+      docId: docId.value,
+      title: docTitle.value,
+      content: content.value
+    }
+  }
+
   docId.value = doc.docId
-  docTitle.value = doc.title
+  // 延迟显示标题：在连接成功或收到 SYNC 后再应用，避免在无权限时短暂显示目标标题
+  pendingDoc.value = { docId: doc.docId, title: doc.title }
   // 切换文档时先清空内容，等待WebSocket或API加载
   content.value = '' 
   
@@ -759,6 +850,15 @@ onMounted(async () => {
   const params = new URLSearchParams(window.location.search)
   const id = params.get('docId')
   if (id) {
+    // 在从 URL 打开文档前，记录当前为上一个文档（如果有）
+    if (docId.value && docId.value !== 'doc-001') {
+      previousDoc.value = {
+        docId: docId.value,
+        title: docTitle.value,
+        content: content.value
+      }
+    }
+
     docId.value = id
     // Fetch doc info
     try {
@@ -769,6 +869,12 @@ onMounted(async () => {
         if (data.code === 200) {
             docTitle.value = data.data.title
             content.value = data.data.content || ''
+            // 将此成功加载的文档记为最近打开
+            try {
+              sessionStorage.setItem('lastDoc', JSON.stringify({ docId: id, title: docTitle.value, content: content.value }))
+            } catch (e) {
+              console.warn('无法写入 sessionStorage.lastDoc', e)
+            }
             // Connect if we have a docId
             handleConnect()
         } else {

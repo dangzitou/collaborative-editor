@@ -48,6 +48,12 @@ export function useWebSocket() {
         isConnected.value = true
         addMessage('system', 'WebSocket 连接成功')
         startHeartbeat()
+        // 若调用 connect 时传入 onOpen 回调，则执行
+        try {
+          if (options && typeof options.onOpen === 'function') options.onOpen()
+        } catch (e) {
+          console.warn('onOpen callback error', e)
+        }
       }
 
       socket.value.onmessage = (event) => {
