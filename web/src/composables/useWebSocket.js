@@ -96,7 +96,18 @@ export function useWebSocket() {
         stopHeartbeat()
         addMessage('system', `连接关闭 (code: ${event.code}, reason: ${event.reason || '无'})`)
         socket.value = null
-        
+
+        // 新增：根据 reason 区分无权限和 token 失效
+        if (event.reason === '无权限操作此文档') {
+          if (typeof options.onPermissionDenied === 'function') {
+            options.onPermissionDenied(event)
+          }
+        } else if (event.reason === 'Invalid Token') {
+          if (typeof options.onTokenInvalid === 'function') {
+            options.onTokenInvalid(event)
+          }
+        }
+
         if (options.onClose) {
           options.onClose(event)
         }

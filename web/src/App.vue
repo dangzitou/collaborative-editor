@@ -197,17 +197,36 @@ function handleConnect() {
   const wsUrl = serverUrl.value + docId.value + '?token=' + token.value + '&username=' + encodeURIComponent(currentUsername.value)
   connect(wsUrl, {
     onClose: (event) => {
-      // Token 无效或过期
+      // 优先 reason 判断
+      if (event.reason === '无权限操作此文档') {
+        showMessage('无权限操作此文档', () => {
+          // 清空当前文档ID，回首页或停留，并移除 URL docId 参数，防止自动重连
+          docId.value = ''
+          docTitle.value = '未命名文档'
+          content.value = ''
+          // 移除 URL docId 参数
+          const url = new URL(window.location)
+          url.searchParams.delete('docId')
+          window.history.replaceState({}, '', url)
+        })
+        return
+      }
+      if (event.reason === 'Invalid Token') {
+        showMessage('登录过期请重新登录', () => {
+          logout()
+          showAuthModal.value = true
+        })
+        return
+      }
+      // 兼容旧逻辑
       if (event.code === 1008) {
         logout()
-        // 避免 alert 阻塞，使用 setTimeout
         setTimeout(() => {
           alert('登录已过期，请重新登录')
           showAuthModal.value = true
         }, 100)
         return
       }
-
       if (event.code === 1003 || event.reason === "Document not found") {
         showMessage('文档不存在或已被删除', () => {
           window.location.href = '/'

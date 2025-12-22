@@ -11,7 +11,10 @@ import org.example.collaborative_editor.constant.WsMessageType;
 import org.example.collaborative_editor.context.BaseContext;
 import org.example.collaborative_editor.dto.WsMessage;
 import org.example.collaborative_editor.entity.Document;
+import org.example.collaborative_editor.mapper.CollaboratorMapper;
+import org.example.collaborative_editor.mapper.DocumentMapper;
 import org.example.collaborative_editor.service.DocumentService;
+import org.example.collaborative_editor.entity.Collaborator;
 import org.example.collaborative_editor.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -51,6 +54,9 @@ public class EditorServer {
      */
     private static ObjectMapper objectMapper;
 
+    private static CollaboratorMapper collaboratorMapper;
+
+    private static DocumentMapper documentMapper;
     /**
      * RedisTemplate，用于操作 Redis。
      * 由于 WebSocket 是多例模式，需要通过静态 setter 方法注入。
@@ -64,6 +70,16 @@ public class EditorServer {
     @Autowired
     public void setObjectMapper(ObjectMapper objectMapper) {
         EditorServer.objectMapper = objectMapper;
+    }
+
+    @Autowired
+    public void setCollaboratorMapper(CollaboratorMapper collaboratorMapper) {
+        EditorServer.collaboratorMapper = collaboratorMapper;
+    }
+
+    @Autowired
+    public void setDocumentMapper(DocumentMapper documentMapper) {
+        EditorServer.documentMapper = documentMapper;
     }
 
     @Autowired
@@ -116,6 +132,31 @@ public class EditorServer {
             try {
                 Claims claims = jwtUtil.parseToken(token);
                 userId = Long.valueOf(claims.get("userId").toString());
+                Document document = documentService.getDocument(docId);
+                if (document == null) {
+                    // 文档不存在，拒绝连接
+                    try {
+                        session.close(new CloseReason(CloseReason.CloseCodes.CANNOT_ACCEPT,
+                                MessageConstant.DOCUMENT_NOT_FOUND));
+                    } catch (IOException ex) {
+                        ex.printStackTrace();
+                    }
+                    return;
+                } else if (!document.getOwnerId().equals(userId)) {
+                    // 不是所有者，检查是否为协作者
+                    Collaborator collaborator = collaboratorMapper.getByDocIdAndUserId(docId,
+                            userId);
+                    if (collaborator == null) {
+                        // 不是协作者，拒绝连接
+                        try {
+                            session.close(new CloseReason(CloseReason.CloseCodes.VIOLATED_POLICY,
+                                    MessageConstant.DOCUMENT_NO_PERMISSION));
+                        } catch (IOException ex) {
+                            ex.printStackTrace();
+                        }
+                    }
+                }
+
                 // 优先使用前端传来的显示名称（昵称），否则使用 Token 中的用户名
                 if (queryUsername != null && !queryUsername.isEmpty()) {
                     username = queryUsername;
