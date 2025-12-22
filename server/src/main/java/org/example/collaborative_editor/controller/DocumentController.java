@@ -79,4 +79,15 @@ public class DocumentController {
         log.info("加入协作: {}", code);
         return Result.success(documentService.joinByInviteCode(code));
     }
+
+    /**
+     * 修改文档标题
+     */
+    @PutMapping("/{docId}/title")
+    public Result<Void> updateTitle(@PathVariable String docId, @RequestBody java.util.Map<String, String> body) {
+        String title = body.get("title");
+        log.info("修改文档标题: {} -> {}", docId, title);
+        documentService.updateTitle(docId, title);
+        return Result.success();
+    }
 }

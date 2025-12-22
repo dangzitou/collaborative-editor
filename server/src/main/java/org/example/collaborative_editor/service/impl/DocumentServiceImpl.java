@@ -171,4 +171,22 @@ public class DocumentServiceImpl implements DocumentService {
 
         return document;
     }
+
+    @Override
+    public void updateTitle(String docId, String title) {
+        Document document = documentMapper.getByDocId(docId);
+        if (document == null) {
+            throw new BusinessException(MessageConstant.DOCUMENT_NOT_FOUND);
+        }
+        
+        // 权限检查：只有所有者可以修改标题
+        Long currentUserId = BaseContext.getCurrentId();
+        if (!document.getOwnerId().equals(currentUserId)) {
+            throw new BusinessException(MessageConstant.DOCUMENT_NO_PERMISSION);
+        }
+
+        document.setTitle(title);
+        document.setUpdateTime(LocalDateTime.now());
+        documentMapper.update(document);
+    }
 }

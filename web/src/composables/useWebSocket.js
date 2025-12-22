@@ -42,9 +42,11 @@ export function useWebSocket() {
     connectionError.value = null
 
     try {
-      socket.value = new WebSocket(wsUrl)
+      const ws = new WebSocket(wsUrl)
+      socket.value = ws
 
-      socket.value.onopen = () => {
+      ws.onopen = () => {
+        if (socket.value !== ws) return
         isConnected.value = true
         addMessage('system', 'WebSocket 连接成功')
         startHeartbeat()
@@ -56,7 +58,8 @@ export function useWebSocket() {
         }
       }
 
-      socket.value.onmessage = (event) => {
+      ws.onmessage = (event) => {
+        if (socket.value !== ws) return
         let displayContent = event.data
         let parsed = null
         
@@ -97,7 +100,8 @@ export function useWebSocket() {
         }
       }
 
-      socket.value.onclose = (event) => {
+      ws.onclose = (event) => {
+        if (socket.value !== ws) return
         isConnected.value = false
         stopHeartbeat()
         addMessage('system', `连接关闭 (code: ${event.code}, reason: ${event.reason || '无'})`)
@@ -119,7 +123,8 @@ export function useWebSocket() {
         }
       }
 
-      socket.value.onerror = () => {
+      ws.onerror = () => {
+        if (socket.value !== ws) return
         connectionError.value = '连接失败'
         addMessage('error', 'WebSocket 连接错误')
       }
@@ -139,6 +144,7 @@ export function useWebSocket() {
       socket.value.close()
       socket.value = null
     }
+    isConnected.value = false
   }
 
   /**
