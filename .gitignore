@@ -34,7 +34,11 @@ build/
 
 ### VS Code ###
 .vscode/
-.log
+*.log
+
+### 敏感配置文件 ###
+application-dev.properties
+application-prod.properties
 
 ### Mac OS ###
 .DS_Store

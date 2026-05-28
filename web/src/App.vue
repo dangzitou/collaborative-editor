@@ -1,13 +1,3 @@
-// 防止 docId 被清空时所有状态残留
-watch(docId, (newVal) => {
-  if (!newVal) {
-    docTitle.value = '未命名文档'
-    content.value = ''
-    onlineUsers.value = []
-    remoteCursors.value = {}
-    isEditingTitle.value = false
-  }
-})
 <script setup>
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useWebSocket } from './composables/useWebSocket'
@@ -40,6 +30,17 @@ const host = window.location.host
 const serverUrl = ref(`${protocol}//${host}/editor/`)
 const content = ref('')
 const isEditingTitle = ref(false)
+
+// 防止 docId 被清空时所有状态残留
+watch(docId, (newVal) => {
+  if (!newVal) {
+    docTitle.value = '未命名文档'
+    content.value = ''
+    onlineUsers.value = []
+    remoteCursors.value = {}
+    isEditingTitle.value = false
+  }
+})
 
 // 监听登录状态，自动加载文档
 watch(isLoggedIn, async (newVal) => {

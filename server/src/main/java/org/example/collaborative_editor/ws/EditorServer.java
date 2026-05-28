@@ -154,6 +154,7 @@ public class EditorServer {
                         } catch (IOException ex) {
                             ex.printStackTrace();
                         }
+                        return;
                     }
                 }
 
@@ -176,97 +177,99 @@ public class EditorServer {
             }
         }
 
-        // 将 docId 和用户信息存入 Session 属性
-        session.getUserProperties().put("docId", docId);
-        if (userId != null) {
-            session.getUserProperties().put("userId", userId);
-            session.getUserProperties().put("username", username);
-        }
+        try {
+            // 将 docId 和用户信息存入 Session 属性
+            session.getUserProperties().put("docId", docId);
+            if (userId != null) {
+                session.getUserProperties().put("userId", userId);
+                session.getUserProperties().put("username", username);
+            }
 
-        // 从 Redis 获取文档内容
-        String content = (String) redisTemplate.opsForValue().get("doc:" + docId);
+            // 从 Redis 获取文档内容
+            String content = (String) redisTemplate.opsForValue().get("doc:" + docId);
 
-        // 如果 Redis 中没有，尝试从数据库加载
-        if (content == null) {
-            try {
-                Document doc = documentService.getDocument(docId);
-                if (doc != null) {
-                    content = doc.getContent();
-                    if (content == null) {
-                        content = "";
-                    }
-                    // 回写到 Redis，设置过期时间（例如24小时）
-                    redisTemplate.opsForValue().set("doc:" + docId, content, 24, TimeUnit.HOURS);
-                }
-            } catch (Exception e) {
-                log.warn("加载文档失败: {}", docId);
+            // 如果 Redis 中没有，尝试从数据库加载
+            if (content == null) {
                 try {
-                    session.close(
-                            new CloseReason(CloseReason.CloseCodes.CANNOT_ACCEPT, MessageConstant.DOCUMENT_NOT_FOUND));
-                } catch (IOException ex) {
-                    ex.printStackTrace();
+                    Document doc = documentService.getDocument(docId);
+                    if (doc != null) {
+                        content = doc.getContent();
+                        if (content == null) {
+                            content = "";
+                        }
+                        // 回写到 Redis，设置过期时间（例如24小时）
+                        redisTemplate.opsForValue().set("doc:" + docId, content, 24, TimeUnit.HOURS);
+                    }
+                } catch (Exception e) {
+                    log.warn("加载文档失败: {}", docId);
+                    try {
+                        session.close(
+                                new CloseReason(CloseReason.CloseCodes.CANNOT_ACCEPT, MessageConstant.DOCUMENT_NOT_FOUND));
+                    } catch (IOException ex) {
+                        ex.printStackTrace();
+                    }
+                    return;
                 }
-                return;
             }
-        }
 
-        // 将用户加入对应文档的集合
-        // computeIfAbsent 保证原子性：如果集合不存在则创建，存在则返回
-        docSessions.computeIfAbsent(docId, k -> new CopyOnWriteArraySet<>()).add(session);
+            // 将用户加入对应文档的集合
+            // computeIfAbsent 保证原子性：如果集合不存在则创建，存在则返回
+            docSessions.computeIfAbsent(docId, k -> new CopyOnWriteArraySet<>()).add(session);
 
-        log.info("用户 {} (ID:{}) 加入文档 {}, 当前在线人数: {}", username, userId, docId, docSessions.get(docId).size());
+            log.info("用户 {} (ID:{}) 加入文档 {}, 当前在线人数: {}", username, userId, docId, docSessions.get(docId).size());
 
-        // 1. 广播用户加入消息给其他人
-        try {
-            WsMessage joinMsg = new WsMessage();
-            joinMsg.setType(WsMessageType.USER_JOIN);
-            joinMsg.setSender(username);
-            broadcast(objectMapper.writeValueAsString(joinMsg), session);
-        } catch (IOException e) {
-            log.error("广播用户加入消息失败", e);
-        }
-
-        // 2. 发送当前在线用户列表给新用户
-        try {
-            List<String> userList = docSessions.get(docId).stream()
-                    .map(s -> (String) s.getUserProperties().get("username"))
-                    .filter(name -> name != null)
-                    .distinct()
-                    .collect(Collectors.toList());
-
-            WsMessage listMsg = new WsMessage();
-            listMsg.setType(WsMessageType.USER_LIST);
-            listMsg.setSender(WsMessageType.SENDER_SERVER);
-            listMsg.setData(objectMapper.writeValueAsString(userList));
-
-            // 使用 synchronized 避免并发写入
-            synchronized (session) {
-                session.getBasicRemote().sendText(objectMapper.writeValueAsString(listMsg));
-            }
-        } catch (IOException e) {
-            log.error("发送用户列表失败", e);
-        }
-
-        // 如果该文档已有内容，立即发送一条 type: "SYNC" 的消息给新用户
-        if (content != null) {
+            // 1. 广播用户加入消息给其他人
             try {
-                WsMessage syncMsg = new WsMessage();
-                syncMsg.setType(WsMessageType.SYNC);
-                syncMsg.setSender(WsMessageType.SENDER_SERVER);
-                syncMsg.setData(content);
+                WsMessage joinMsg = new WsMessage();
+                joinMsg.setType(WsMessageType.USER_JOIN);
+                joinMsg.setSender(username);
+                broadcast(objectMapper.writeValueAsString(joinMsg), session);
+            } catch (IOException e) {
+                log.error("广播用户加入消息失败", e);
+            }
 
-                String json = objectMapper.writeValueAsString(syncMsg);
+            // 2. 发送当前在线用户列表给新用户
+            try {
+                List<String> userList = docSessions.get(docId).stream()
+                        .map(s -> (String) s.getUserProperties().get("username"))
+                        .filter(name -> name != null)
+                        .distinct()
+                        .collect(Collectors.toList());
+
+                WsMessage listMsg = new WsMessage();
+                listMsg.setType(WsMessageType.USER_LIST);
+                listMsg.setSender(WsMessageType.SENDER_SERVER);
+                listMsg.setData(objectMapper.writeValueAsString(userList));
+
                 // 使用 synchronized 避免并发写入
                 synchronized (session) {
-                    session.getBasicRemote().sendText(json);
+                    session.getBasicRemote().sendText(objectMapper.writeValueAsString(listMsg));
                 }
             } catch (IOException e) {
-                log.error("发送同步消息失败", e);
+                log.error("发送用户列表失败", e);
             }
-        }
 
-        // 清理 BaseContext
-        BaseContext.removeCurrentId();
+            // 如果该文档已有内容，立即发送一条 type: "SYNC" 的消息给新用户
+            if (content != null) {
+                try {
+                    WsMessage syncMsg = new WsMessage();
+                    syncMsg.setType(WsMessageType.SYNC);
+                    syncMsg.setSender(WsMessageType.SENDER_SERVER);
+                    syncMsg.setData(content);
+
+                    String json = objectMapper.writeValueAsString(syncMsg);
+                    // 使用 synchronized 避免并发写入
+                    synchronized (session) {
+                        session.getBasicRemote().sendText(json);
+                    }
+                } catch (IOException e) {
+                    log.error("发送同步消息失败", e);
+                }
+            }
+        } finally {
+            // 清理 BaseContext，防止 ThreadLocal 泄漏
+            BaseContext.removeCurrentId();
+        }
     }
 
     /**
