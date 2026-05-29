@@ -15,7 +15,6 @@ import org.example.collaborative_editor.vo.DocumentVO;
 @RequestMapping("/api/doc")
 @RequiredArgsConstructor
 @Slf4j
-@CrossOrigin(origins = "*")
 public class DocumentController {
 
     private final DocumentService documentService;

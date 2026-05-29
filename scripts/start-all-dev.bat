@@ -1,12 +1,11 @@
 @echo off
 echo ==========================================
-echo Starting Collaborative Editor Environment
+echo Starting CoDoc Collaborative Editor
 echo ==========================================
 
 :: 1. Start Nginx
-echo [1/4] Starting Nginx...
+echo [1/5] Starting Nginx...
 cd /d "%~dp0..\nginx"
-:: Check if nginx is already running to avoid errors, or just try to start
 tasklist /FI "IMAGENAME eq nginx.exe" 2>NUL | find /I /N "nginx.exe">NUL
 if "%ERRORLEVEL%"=="0" (
     echo Nginx is already running. Reloading...
@@ -15,26 +14,35 @@ if "%ERRORLEVEL%"=="0" (
     start nginx
 )
 
-:: 2. Start Backend
-echo [2/4] Starting Backend Server...
+:: 2. Start Yjs WebSocket Server
+echo [2/5] Starting Yjs WebSocket Server...
+cd /d "%~dp0..\server\yjs-server"
+if not exist "node_modules" (
+    echo Installing yjs-server dependencies...
+    call npm install
+)
+start "Yjs WebSocket Server" node server.cjs
+
+:: 3. Start Backend
+echo [3/5] Starting Backend Server...
 cd /d "%~dp0..\server"
-start "Collaborative Editor Backend" mvn spring-boot:run "-Dspring-boot.run.jvmArguments=-Dfile.encoding=GBK"
+start "CoDoc Backend" mvn spring-boot:run "-Dspring-boot.run.jvmArguments=-Dfile.encoding=GBK"
 
-:: 3. Start Frontend
-echo [3/4] Starting Frontend Dev Server...
+:: 4. Start Frontend
+echo [4/5] Starting Frontend Dev Server...
 cd /d "%~dp0..\web"
-start "Collaborative Editor Frontend" npm run dev
+start "CoDoc Frontend" npm run dev
 
-:: 4. Open Browser
-echo [4/4] Opening Browser...
-:: Wait a bit for services to spin up
+:: 5. Open Browser
+echo [5/5] Opening Browser...
 timeout /t 5 >nul
 start http://localhost
 
 echo ==========================================
 echo All services started!
-echo Backend running in new window.
-echo Frontend running in new window.
-echo Nginx running in background.
+echo - Yjs WebSocket: ws://localhost:1234
+echo - Backend: http://localhost:8080
+echo - Frontend: http://localhost:5173
+echo - Nginx: http://localhost
 echo ==========================================
 pause

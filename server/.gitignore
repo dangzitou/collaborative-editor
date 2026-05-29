@@ -25,3 +25,6 @@ Thumbs.db
 application-local.properties
 application-local.yml
 
+# 生产配置（含敏感信息，使用 example 文件作为模板）
+application-prod.properties
+
